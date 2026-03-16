@@ -35,8 +35,14 @@ class Importer {
     private static function set_featured_image($post_id, $image_url) {
         if (!$post_id || !$image_url) return;
         
-        // Check if post already has a featured image
-        if (has_post_thumbnail($post_id)) return;
+        // Check if post already has a featured image with the same source URL
+        $current_thumb_id = get_post_thumbnail_id($post_id);
+        if ($current_thumb_id) {
+            $source_url = get_post_meta($current_thumb_id, '_podify_source_url', true);
+            if ($source_url === $image_url) {
+                return; // Same image already set
+            }
+        }
         
         // Check if we have an attachment for this URL to avoid re-uploading
         global $wpdb;
@@ -454,11 +460,18 @@ class Importer {
                 if ($existing && !empty($existing['id'])) {
                     $rowId = intval($existing['id']);
                     $post_id = intval($existing['post_id']);
+                    
+                    // Verify post still exists
+                    if ($post_id > 0 && !get_post($post_id)) {
+                        $post_id = 0; // Post missing, needs recreation
+                    }
+
                     $update = [];
                     if ($audio) $update['audio_url'] = $audio;
                     if ($image) $update['image_url'] = $image;
                     if ($duration) $update['duration'] = $duration;
                     if ($tags) $update['tags'] = $tags;
+                    if ($desc) $update['description'] = $desc; // Allow description updates
                     if (!empty($update)) {
                         $wpdb->update($table, $update, ['id' => intval($rowId)]);
                     }
@@ -540,6 +553,13 @@ class Importer {
             $feed_id = $item_data['feed_id'];
 
             if ($post_id > 0) {
+                 // Update post content if changed
+                 wp_update_post([
+                     'ID' => $post_id,
+                     'post_title' => $title,
+                     'post_content' => $desc,
+                 ]);
+
                  if ($audio) { 
                      update_post_meta($post_id, '_podify_audio_url', esc_url_raw($audio)); 
                      Logger::log("Updated audio for post $post_id: $audio");

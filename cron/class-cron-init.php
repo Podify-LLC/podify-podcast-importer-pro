@@ -56,7 +56,14 @@ class CronInit {
         }
         wp_clear_scheduled_hook(self::HOOK);
     }
-    public static function run() {}
+    public static function run() {
+        self::schedule_all(); // Ensure per-feed crons are still active
+        $feeds = \PodifyPodcast\Core\Database::get_feeds();
+        if (!$feeds) return;
+        foreach ($feeds as $f) {
+            \PodifyPodcast\Core\Importer::import_feed($f['id']);
+        }
+    }
     public static function run_feed($feed_id) {
         \PodifyPodcast\Core\Importer::import_feed($feed_id);
     }
