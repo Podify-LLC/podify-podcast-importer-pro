@@ -8,16 +8,32 @@ All notable changes to **Podify Podcast Importer Pro** are documented here.
 
 ### Added
 - **Dashboard**: Real-time "Next Sync" timer in the Scheduled Imports table.
+- **Dashboard**: Explicit "Manual" option in the synchronization interval list.
 - **Sync**: Dynamic Title and Content synchronization between RSS feed and WordPress posts.
+- **Sync**: "Pending..." status for automatic feeds waiting for their first background cycle.
 - **Typography**: Support for custom Font Family, Letter Spacing, and Line Height for episode titles.
 
 ### Changed
 - **Sync**: Refactored the Auto-Sync engine for 100% reliability with multiple feeds.
+- **Sync**: Optimized synchronization performance by implementing "Smart Change Detection"—the plugin now skips database and WordPress updates if the RSS data matches existing content perfectly.
+- **Sync**: Implemented "Site Performance Protection"—added CPU throttling, automatic memory clearing, and synchronization locking to ensure the import process never slows down your website.
 - **Sync**: Improved "Missing Post Recovery" to recreate deleted WordPress posts without duplicating database records.
 - **Sync**: Implemented "Artwork Auto-Refresh" to update featured images if the RSS artwork URL changes.
 - **UI**: Updated card thumbnails to a 1:1 square aspect ratio with proper containment.
 - **UI**: Stabilized card and button layouts to remain stationary on hover.
 - **Styling**: Increased CSS specificity and implemented theme resets to resolve conflicts with aggressive themes (e.g., cmsmasters).
+
+### Fixed
+- **Sync**: Implemented background processing for manual triggers—syncing now starts **immediately** upon clicking but runs via WP-Cron to completely eliminate 504 Gateway Timeout errors.
+- **Sync**: Re-engineered the "Force" sync logic to perform a full background re-import, ensuring all episodes and images are refreshed even on slow servers.
+- **Sync**: Improved the progress bar to be "Self-Healing"—it now tracks background tasks until completion, even if the initial browser request is interrupted.
+- **Sync**: Resolved an issue where some episodes were missing their connected WordPress posts by implementing a self-healing recreation logic.
+- **Sync**: Fixed real-time sync timer layout and responsiveness in the admin table.
+- **Dashboard**: Redesigned the progress bar into a single unit with centered status text and high-contrast dynamic coloring.
+- **Dashboard**: Added real-time status text to the progress bar (Percentage, Phase, and Item count).
+- **Dashboard**: Fixed alignment issues in the "Global Styling" settings card by standardizing field layouts.
+- **Maintenance**: Fixed a PHP syntax error in the Importer class.
+- **Maintenance**: Added detailed debug logging for image sideloading, database operations, and post creation failures.
 
 ## 1.0.38
 ### Title

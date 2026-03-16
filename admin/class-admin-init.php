@@ -26,6 +26,7 @@ class AdminInit {
         if (!current_user_can('manage_options')) return;
         $notice = '';
         $intervals = [
+            'manual' => 'Manual',
             'every_15_minutes' => 'Every 15 Minutes',
             'every_30_minutes' => 'Every 30 Minutes',
             'hourly' => 'Hourly',
@@ -404,7 +405,7 @@ class AdminInit {
         } elseif ($tab === 'scheduled') {
             echo '<div class="podify-table-card">';
             echo '<table class="podify-modern-table">';
-            echo '<thead><tr><th style="width:60px">ID</th><th>Feed Source</th><th style="width:150px">Next Sync</th><th style="width:640px; text-align:right;">Actions</th></tr></thead>';
+            echo '<thead><tr><th style="width:60px">ID</th><th>Feed Source</th><th style="width:120px">Next Sync</th><th style="width:640px; text-align:right;">Actions</th></tr></thead>';
             echo '<tbody>';
             if ($feeds) {
                 foreach ($feeds as $f) {
@@ -420,15 +421,22 @@ class AdminInit {
                     // Next Sync Logic
                     $next_sync = wp_next_scheduled(\PodifyPodcast\Core\Cron\CronInit::HOOK_FEED, [$id]);
                     $next_sync_html = '<span class="podify-badge podify-badge-outline">Manual Only</span>';
-                    if ($next_sync) {
-                        $diff = $next_sync - time();
-                        if ($diff > 0) {
-                            $hours = floor($diff / 3600);
-                            $mins = floor(($diff % 3600) / 60);
-                            $next_sync_html = '<span class="podify-badge podify-badge-primary podify-next-sync-timer" data-time="'.$next_sync.'" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">' . 
-                                ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm</span>';
+                    
+                    if ($interval_cur !== 'manual') {
+                        if ($next_sync) {
+                            $diff = $next_sync - time();
+                            if ($diff > 0) {
+                                $hours = floor($diff / 3600);
+                                $mins = floor(($diff % 3600) / 60);
+                                $next_sync_html = '<span class="podify-badge podify-badge-primary podify-next-sync-timer" data-time="'.$next_sync.'" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; min-width:60px; text-align:center;">' . 
+                                    ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm</span>';
+                            } else {
+                                $next_sync_html = '<span class="podify-badge podify-badge-success" style="min-width:60px; text-align:center;">Syncing...</span>';
+                            }
                         } else {
-                            $next_sync_html = '<span class="podify-badge podify-badge-success">Syncing...</span>';
+                            $next_sync_html = '<span class="podify-badge podify-badge-warning" style="background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; min-width:60px; text-align:center;">Pending...</span>';
+                            // Try to reschedule if it should be active but isn't
+                            \PodifyPodcast\Core\Cron\CronInit::schedule_feed($id, $interval_cur);
                         }
                     }
                     
@@ -447,7 +455,10 @@ class AdminInit {
                     wp_nonce_field('podify_remove_feed');
                     echo '<button class="podify-btn-modern podify-btn-danger-outline podify-feed-delete" title="Delete Feed"><span class="dashicons dashicons-trash"></span></button></form>';
                     echo '</div>';
-                    echo '<div class="podify-progress-wrap" data-id="'.$id.'" style="width:100%; height:6px; margin-top:10px; display:none; border-radius:99px; background:#e2e8f0; overflow:hidden;"><div class="podify-progress-bar" style="height:100%; background:#2563eb; width:0; transition:width 0.3s ease;"></div></div>';
+                    echo '<div class="podify-progress-wrap" data-id="'.$id.'" style="width:100%; margin-top:15px; display:none; position:relative; height:24px; border-radius:6px; background:#e2e8f0; overflow:hidden; border:1px solid #cbd5e1;">';
+                    echo '<div class="podify-progress-bar" style="height:100%; background:#3b82f6; width:0; transition:width 0.3s ease;"></div>';
+                    echo '<div class="podify-progress-text" style="position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#1e293b; pointer-events:none; z-index:2;">Starting...</div>';
+                    echo '</div>';
                     echo '</td></tr>';
 
                     // Customization Row
@@ -521,21 +532,22 @@ class AdminInit {
             echo '    var next = parseInt(el.getAttribute("data-time"));';
             echo '    var now = Math.floor(Date.now() / 1000);';
             echo '    var diff = next - now;';
-            echo '    if(diff <= 0) { el.textContent = "Syncing..."; el.className = "podify-badge podify-badge-success"; return; }';
+            echo '    if(diff <= 0) { el.textContent = "Syncing..."; el.className = "podify-badge podify-badge-success"; el.style.minWidth = "60px"; return; }';
             echo '    var h = Math.floor(diff / 3600);';
             echo '    var m = Math.floor((diff % 3600) / 60);';
             echo '    el.textContent = (h > 0 ? h + "h " : "") + m + "m";';
             echo '  });';
-            echo '}, 60000);';
+            echo '}, 10000);'; // Run every 10 seconds for better responsiveness
 
             echo 'function poll(id, btn, origText) {';
+            echo '  document.querySelectorAll(".podify-progress-wrap").forEach(function(w){ w.style.display="none"; });'; // Hide all other bars first
             echo '  var wrap = document.querySelector(".podify-progress-wrap[data-id=\'"+id+"\']");';
             echo '  var bar = wrap ? wrap.querySelector(".podify-progress-bar") : null;';
             echo '  var txt = wrap ? wrap.querySelector(".podify-progress-text") : null;';
             echo '  if(wrap) wrap.style.display="inline-block";';
             echo '  if(bar) bar.style.width="0%";';
             echo '  if(txt) txt.textContent="Starting...";';
-            echo '  return setInterval(function(){';
+            echo '  var t = setInterval(function(){';
             echo '    fetch(PROGRESS_URL+"?feed_id="+id, {headers:{"X-WP-Nonce":NONCE}}).then(function(r){';
             echo '      if(!r.ok) throw new Error("Status "+r.status);';
             echo '      return r.json();';
@@ -543,24 +555,30 @@ class AdminInit {
             echo '      if(d.ok && d.status!=="idle"){';
             echo '        if(bar) {';
             echo '          bar.style.width=d.percentage+"%";';
-            echo '          if(d.status.indexOf("Phase 2")!==-1){bar.style.backgroundColor="#46b450";}else{bar.style.backgroundColor="#2271b1";}';
+            echo '          if(d.status.indexOf("Phase 2")!==-1){bar.style.backgroundColor="#22c55e";}else{bar.style.backgroundColor="#3b82f6";}';
             echo '        }';
-            echo '        if(txt) txt.textContent=d.percentage+"% ("+d.current+"/"+d.total+") "+(d.status||"");';
+            echo '        if(txt) {';
+            echo '          var statusTxt = d.status || "";';
+            echo '          txt.textContent = d.percentage + "% - " + statusTxt + " (" + d.current + "/" + d.total + ")";';
+            echo '          if(d.percentage > 50) { txt.style.color = "#ffffff"; } else { txt.style.color = "#1e293b"; }';
+            echo '        }';
+            echo '        if(d.percentage >= 100) { stopPoll(t, id, btn, origText, "Sync completed!"); }';
             echo '      }';
             echo '    }).catch(function(e){});';
             echo '  }, 3000);';
+            echo '  return t;';
             echo '}';
-            echo 'function stopPoll(t, id, msg) {';
+            echo 'function stopPoll(t, id, btn, origText, msg) {';
             echo '  clearInterval(t);';
+            echo '  if(btn) { btn.disabled=false; btn.textContent=origText; }';
             echo '  var wrap = document.querySelector(".podify-progress-wrap[data-id=\'"+id+"\']");';
-            echo '  if(wrap) setTimeout(function(){ wrap.style.display="none"; }, 3000);'; // keep visible for 3s
-            echo '  if(msg) alert(msg);';
+            echo '  if(wrap) setTimeout(function(){ wrap.style.display="none"; }, 5000);'; // keep visible for 5s
             echo '}';
             echo 'document.addEventListener("click",function(e){';
             echo 'var b=e.target.closest(".podify-sync");';
-            echo 'if(b){var id=b.getAttribute("data-id");b.disabled=true;var ot=b.textContent;var t=poll(id,b,ot);fetch(SYNC_URL,{method:"POST",headers:{"Content-Type":"application/json","X-WP-Nonce":NONCE},body:JSON.stringify({feed_id:parseInt(id)})}).then(function(r){return r.json()}).then(function(d){b.disabled=false;b.textContent=ot;stopPoll(t,id,d.message||"Done")}).catch(function(){b.disabled=false;b.textContent=ot;stopPoll(t,id,"Failed")});return}';
+            echo 'if(b){var id=b.getAttribute("data-id");b.disabled=true;var ot=b.textContent;var t=poll(id,b,ot);fetch(SYNC_URL,{method:"POST",headers:{"Content-Type":"application/json","X-WP-Nonce":NONCE},body:JSON.stringify({feed_id:parseInt(id)})}).then(function(r){return r.json()}).catch(function(err){console.error("Podify: Sync request error or timeout", err);/* Poll will continue anyway */});return}';
             echo 'var r=e.target.closest(".podify-resync");';
-            echo 'if(r){var id=r.getAttribute("data-id");r.disabled=true;var ot=r.textContent;var t=poll(id,r,ot);fetch(RESYNC_URL,{method:"POST",headers:{"Content-Type":"application/json","X-WP-Nonce":NONCE},body:JSON.stringify({feed_id:parseInt(id)})}).then(function(resp){return resp.json()}).then(function(d){r.disabled=false;r.textContent=ot;stopPoll(t,id,d.message||"Done")}).catch(function(){r.disabled=false;r.textContent=ot;stopPoll(t,id,"Failed")})}';
+            echo 'if(r){var id=r.getAttribute("data-id");r.disabled=true;var ot=r.textContent;var t=poll(id,r,ot);fetch(RESYNC_URL,{method:"POST",headers:{"Content-Type":"application/json","X-WP-Nonce":NONCE},body:JSON.stringify({feed_id:parseInt(id)})}).then(function(resp){return resp.json()}).catch(function(err){console.error("Podify: Resync request error or timeout", err);/* Poll will continue anyway */})}';
             echo '});';
             echo '})();</script>';
         } elseif ($tab === 'episodes') {
@@ -908,21 +926,17 @@ class AdminInit {
             // Group 2: Action Buttons
             echo '<div>';
             echo '<h4 class="podify-admin-section-title">Action Buttons</h4>';
-            echo '<div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">';
             echo '<div class="podify-field"><label>Button BG</label><input type="text" class="podify-color-picker" name="button_bg_color" value="'.esc_attr($settings['button_bg_color']??'').'"></div>';
             echo '<div class="podify-field"><label>Button Text</label><input type="text" class="podify-color-picker" name="button_text_color" value="'.esc_attr($settings['button_text_color']??'').'"></div>';
-            echo '</div>';
             echo '</div>';
             
             // Group 3: Load More Button
             echo '<div>';
             echo '<h4 class="podify-admin-section-title">Load More Button</h4>';
-            echo '<div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">';
             echo '<div class="podify-field"><label>BG Color</label><input type="text" class="podify-color-picker" name="load_more_bg_color" value="'.esc_attr($settings['load_more_bg_color']??'').'"></div>';
             echo '<div class="podify-field"><label>Text Color</label><input type="text" class="podify-color-picker" name="load_more_text_color" value="'.esc_attr($settings['load_more_text_color']??'').'"></div>';
             echo '<div class="podify-field"><label>Hover BG</label><input type="text" class="podify-color-picker" name="load_more_bg_hover_color" value="'.esc_attr($settings['load_more_bg_hover_color']??'').'"></div>';
             echo '<div class="podify-field"><label>Hover Text</label><input type="text" class="podify-color-picker" name="load_more_text_hover_color" value="'.esc_attr($settings['load_more_text_hover_color']??'').'"></div>';
-            echo '</div>';
             echo '</div>';
             
             echo '</div>'; // End main grid

@@ -29,13 +29,17 @@ class RestInit {
                 if (!$feed_id) {
                     return ['ok' => false, 'message' => 'Missing feed_id'];
                 }
-                try {
-                    $res = \PodifyPodcast\Core\Importer::import_feed($feed_id);
-                    return $res;
-                } catch (\Throwable $e) {
-                    \PodifyPodcast\Core\Logger::log('Sync Exception: ' . $e->getMessage());
-                    return ['ok' => false, 'message' => 'Server Error: ' . $e->getMessage()];
-                }
+                
+                // Set initial status immediately so polling sees it
+                set_transient('podify_import_progress_'.$feed_id, [
+                    'total' => 0, 'current' => 0, 'percentage' => 0, 'status' => 'Syncing...'
+                ], 3600);
+
+                // Schedule immediate background sync
+                wp_schedule_single_event(time(), \PodifyPodcast\Core\Cron\CronInit::HOOK_FEED, [$feed_id, false]);
+                spawn_cron(); // Try to trigger cron execution immediately
+                
+                return ['ok' => true, 'message' => 'Sync started'];
             }
         ]);
         register_rest_route('podify/v1','/resync',[
@@ -48,13 +52,17 @@ class RestInit {
                 if (!$feed_id) {
                     return ['ok' => false, 'message' => 'Missing feed_id'];
                 }
-                try {
-                    $res = \PodifyPodcast\Core\Importer::resync_feed($feed_id);
-                    return $res;
-                } catch (\Throwable $e) {
-                    \PodifyPodcast\Core\Logger::log('Resync Exception: ' . $e->getMessage());
-                    return ['ok' => false, 'message' => 'Server Error: ' . $e->getMessage()];
-                }
+
+                // Set initial status immediately
+                set_transient('podify_import_progress_'.$feed_id, [
+                    'total' => 0, 'current' => 0, 'percentage' => 0, 'status' => 'Force Syncing...'
+                ], 3600);
+
+                // Schedule background force sync
+                wp_schedule_single_event(time(), \PodifyPodcast\Core\Cron\CronInit::HOOK_FEED, [$feed_id, true]);
+                spawn_cron();
+                
+                return ['ok' => true, 'message' => 'Force sync started'];
             }
         ]);
         register_rest_route('podify/v1','/episodes',[

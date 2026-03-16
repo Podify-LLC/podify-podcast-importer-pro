@@ -2,9 +2,9 @@
 # Podify Podcast Importer Pro
 
 - Contributors: podify
-- Version: 1.0.33
+- Version: 1.0.39
 - Requires at least: 6.0
-- Tested up to: 6.5
+- Tested up to: 6.7
 
 A clean, scalable podcast importer with RSS sync and list-style UI.
 

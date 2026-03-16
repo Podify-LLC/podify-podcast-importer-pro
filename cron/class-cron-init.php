@@ -6,7 +6,7 @@ class CronInit {
     const HOOK_FEED = 'podify_podcast_sync_feed';
     public static function register() {
         add_action(self::HOOK, [self::class,'run']);
-        add_action(self::HOOK_FEED, [self::class,'run_feed'], 10, 1);
+        add_action(self::HOOK_FEED, [self::class,'run_feed'], 10, 2);
         add_filter('cron_schedules', [self::class,'schedules']);
     }
     public static function schedule() {
@@ -19,11 +19,14 @@ class CronInit {
     public static function schedule_feed($feed_id, $interval) {
         if (!function_exists('wp_next_scheduled') || !function_exists('wp_schedule_event')) return;
         $feed_id = intval($feed_id);
-        $interval = $interval ?: 'hourly';
+        if (!$interval || $interval === 'manual') {
+            self::clear_feed($feed_id);
+            return;
+        }
         $args = [$feed_id];
         $next = wp_next_scheduled(self::HOOK_FEED, $args);
         if (!$next) {
-            wp_schedule_event(time(), $interval, self::HOOK_FEED, $args);
+            wp_schedule_event(time() + 60, $interval, self::HOOK_FEED, $args);
         }
     }
     public static function clear_feed($feed_id) {
@@ -64,7 +67,7 @@ class CronInit {
             \PodifyPodcast\Core\Importer::import_feed($f['id']);
         }
     }
-    public static function run_feed($feed_id) {
-        \PodifyPodcast\Core\Importer::import_feed($feed_id);
+    public static function run_feed($feed_id, $force = false) {
+        \PodifyPodcast\Core\Importer::import_feed($feed_id, $force);
     }
 }

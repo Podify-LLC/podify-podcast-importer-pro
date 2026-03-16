@@ -70,19 +70,29 @@ class Importer {
                 set_post_thumbnail($post_id, $id);
                 update_post_meta($id, '_podify_source_url', $image_url);
             } else {
-                Logger::log('Importer: Failed to sideload image: ' . $id->get_error_message());
+                Logger::error('Importer: Failed to sideload image for post '.$post_id.': ' . $id->get_error_message());
             }
         } catch (\Throwable $e) {
-            Logger::log('Importer: Exception during image sideload: ' . $e->getMessage());
+            Logger::error('Importer: Exception during image sideload for post '.$post_id.': ' . $e->getMessage());
         } catch (\Exception $e) {
-            Logger::log('Importer: Exception during image sideload: ' . $e->getMessage());
+            Logger::error('Importer: Exception during image sideload for post '.$post_id.': ' . $e->getMessage());
         }
     }
 
     public static function import_feed($feed_id, $force = false) {
+        $lock_key = 'podify_sync_lock_' . $feed_id;
+        if (get_transient($lock_key)) {
+            Logger::log("Sync already in progress for feed $feed_id. Skipping.");
+            return ['ok' => false, 'message' => 'Sync already in progress'];
+        }
+        set_transient($lock_key, true, 1800); // 30 min lock
+
         Logger::log("Starting import for feed $feed_id (Force: " . ($force?'Yes':'No') . ")");
         if (function_exists('set_time_limit')) {
-            set_time_limit(0);
+            @set_time_limit(0);
+        }
+        if (function_exists('ignore_user_abort')) {
+            @ignore_user_abort(true);
         }
         $feed_id = intval($feed_id);
         if (!$feed_id) {
@@ -91,6 +101,7 @@ class Importer {
         $feed = Database::get_feed($feed_id);
         if (!$feed || empty($feed['feed_url'])) {
             Logger::log("Feed $feed_id not found or has no URL");
+            delete_transient($lock_key);
             return ['ok' => false, 'message' => 'Feed not found'];
         }
         $options = [];
@@ -102,17 +113,22 @@ class Importer {
         Logger::log("Fetching feed URL: $url");
         $resp = wp_remote_get($url, ['timeout' => 30, 'headers' => ['Accept' => 'application/rss+xml, application/xml;q=0.9, */*;q=0.8']]);
         if (is_wp_error($resp)) {
-            Logger::error('Import error: '.$resp->get_error_message());
-            return ['ok' => false, 'message' => 'Failed to fetch feed: ' . $resp->get_error_message()];
+            $error_msg = $resp->get_error_message();
+            Logger::error("Import error for feed $feed_id ($url): " . $error_msg);
+            delete_transient($lock_key);
+            return ['ok' => false, 'message' => 'Failed to fetch feed: ' . $error_msg];
         }
         $response_code = wp_remote_retrieve_response_code($resp);
         if ($response_code !== 200) {
-            Logger::error("Feed fetch failed with status code: $response_code");
-            return ['ok' => false, 'message' => "Failed to fetch feed (HTTP $response_code)"];
+            $error_msg = "HTTP $response_code";
+            Logger::error("Feed fetch failed for $feed_id ($url) with status code: $response_code");
+            delete_transient($lock_key);
+            return ['ok' => false, 'message' => "Failed to fetch feed ($error_msg)"];
         }
         $body = wp_remote_retrieve_body($resp);
         if (!$body) {
             Logger::error("Feed response body is empty");
+            delete_transient($lock_key);
             return ['ok' => false, 'message' => 'Empty feed response'];
         }
         Logger::log("Feed fetched successfully. Body length: " . strlen($body));
@@ -127,13 +143,14 @@ class Importer {
         if (!$xml) {
             $errors = libxml_get_errors();
             foreach ($errors as $error) {
-                Logger::error("XML Parse Error: " . $error->message);
+                Logger::error("XML Parse Error for feed $feed_id: " . $error->message);
             }
             libxml_clear_errors();
             // Restore settings
             if (function_exists('wp_suspend_cache_addition')) wp_suspend_cache_addition(false);
             if (function_exists('wp_defer_term_counting')) wp_defer_term_counting(false);
             if (function_exists('wp_defer_comment_counting')) wp_defer_comment_counting(false);
+            delete_transient($lock_key);
             return ['ok' => false, 'message' => 'Invalid RSS XML'];
         }
 
@@ -452,47 +469,72 @@ class Importer {
             $rowId = 0;
             $post_id = 0;
 
-            if (!$force) {
-                $existing = $wpdb->get_row($wpdb->prepare(
-                    "SELECT id, post_id FROM $table WHERE feed_id=%d AND title=%s AND published=%s LIMIT 1",
-                    $feed_id, $title, $published
-                ), ARRAY_A);
-                if ($existing && !empty($existing['id'])) {
-                    $rowId = intval($existing['id']);
-                    $post_id = intval($existing['post_id']);
-                    
-                    // Verify post still exists
-                    if ($post_id > 0 && !get_post($post_id)) {
-                        $post_id = 0; // Post missing, needs recreation
+            // Always check for existing to avoid duplicates
+            $existing = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table WHERE feed_id=%d AND title=%s AND published=%s LIMIT 1",
+                $feed_id, $title, $published
+            ), ARRAY_A);
+            
+            if ($existing && !empty($existing['id'])) {
+                $rowId = intval($existing['id']);
+                $post_id = intval($existing['post_id']);
+                
+                // Verify post still exists and is a valid post (not an attachment)
+                if ($post_id > 0) {
+                    $post = get_post($post_id);
+                    $expected_pt = !empty($options['post_type']) ? $options['post_type'] : 'post';
+                    if (!$post || $post->post_type !== $expected_pt || $post->post_status === 'trash') {
+                        $post_id = 0; // Post missing or invalid type, needs recreation
                     }
+                }
 
-                    $update = [];
-                    if ($audio) $update['audio_url'] = $audio;
-                    if ($image) $update['image_url'] = $image;
-                    if ($duration) $update['duration'] = $duration;
-                    if ($tags) $update['tags'] = $tags;
-                    if ($desc) $update['description'] = $desc; // Allow description updates
-                    if (!empty($update)) {
-                        $wpdb->update($table, $update, ['id' => intval($rowId)]);
-                    }
+                // Change Detection for Internal DB
+                $changed = false;
+                $update = [];
+                if ($audio && $audio !== ($existing['audio_url']??'')) { $update['audio_url'] = $audio; $changed = true; }
+                if ($image && $image !== ($existing['image_url']??'')) { $update['image_url'] = $image; $changed = true; }
+                if ($duration && $duration !== ($existing['duration']??'')) { $update['duration'] = $duration; $changed = true; }
+                if ($tags && $tags !== ($existing['tags']??'')) { $update['tags'] = $tags; $changed = true; }
+                if ($desc && $desc !== ($existing['description']??'')) { $update['description'] = $desc; $changed = true; }
+                
+                // If we found the post was missing, update the DB record too
+                if ($post_id === 0 && intval($existing['post_id']) > 0) {
+                    $update['post_id'] = 0;
+                    $changed = true;
+                }
+
+                if (!empty($update)) {
+                    $wpdb->update($table, $update, ['id' => intval($rowId)]);
+                }
+
+                // Only process Phase 2 if something changed OR post is missing OR we are forcing
+                $needs_processing = ($changed || $post_id === 0 || $force);
+                
+                if (!$needs_processing) {
+                    $count++;
+                    continue; // Already exists and data matches, skip to next
                 }
             }
 
             if (!$rowId) {
-                if (!$audio) { Logger::log('Importer: No audio for new episode "'.$title.'" (feed '.$feed_id.')'); }
-                $wpdb->insert($table, [
-                    'feed_id' => $feed_id,
-                    'title' => $title,
-                    'description' => $desc,
-                    'audio_url' => $audio,
-                    'image_url' => $image ?: (!empty($options['featured_image']) ? self::clean_url($options['featured_image']) : ''),
-                    'duration' => $duration,
-                    'tags' => $tags,
-                    'categories' => $categoriesArr,
-                    'published' => $published,
-                ]);
-                $rowId = intval($wpdb->insert_id);
-            }
+                    if (!$audio) { Logger::warning('Importer: No audio detected for episode "'.$title.'" (feed '.$feed_id.')'); }
+                    $inserted = $wpdb->insert($table, [
+                        'feed_id' => $feed_id,
+                        'title' => $title,
+                        'description' => $desc,
+                        'audio_url' => $audio,
+                        'image_url' => $image ?: (!empty($options['featured_image']) ? self::clean_url($options['featured_image']) : ''),
+                        'duration' => $duration,
+                        'tags' => $tags,
+                        'categories' => $categoriesArr,
+                        'published' => $published,
+                    ]);
+                    if ($inserted === false) {
+                        Logger::error("Importer: Failed to insert episode into database: $title. SQL Error: " . $wpdb->last_error);
+                        continue; // Skip processing if database insert failed
+                    }
+                    $rowId = intval($wpdb->insert_id);
+                }
 
             if ($rowId) {
                 $items_to_process[] = [
@@ -528,8 +570,13 @@ class Importer {
         $total_posts = count($items_to_process);
         
         foreach ($items_to_process as $item_data) {
-            // Throttle CPU usage for heavy post creation operations
-            usleep(50000); // 50ms pause per post
+            // Site Performance Guard: Throttle CPU and clear memory every 5 items
+            if ($count_posts % 5 === 0) {
+                usleep(100000); // 100ms pause to let other site processes run
+                if (function_exists('wp_cache_flush_runtime')) {
+                    wp_cache_flush_runtime(); // Clear runtime cache to prevent memory bloat
+                }
+            }
 
             $count_posts++;
             $rowId = $item_data['row_id'];
@@ -553,40 +600,66 @@ class Importer {
             $feed_id = $item_data['feed_id'];
 
             if ($post_id > 0) {
-                 // Update post content if changed
-                 wp_update_post([
-                     'ID' => $post_id,
-                     'post_title' => $title,
-                     'post_content' => $desc,
-                 ]);
-
-                 if ($audio) { 
-                     update_post_meta($post_id, '_podify_audio_url', esc_url_raw($audio)); 
-                     Logger::log("Updated audio for post $post_id: $audio");
+                 $post = get_post($post_id);
+                 if ($post) {
+                     // Only update post content if it actually changed
+                     if ($post->post_title !== $title || $post->post_content !== $desc) {
+                         wp_update_post([
+                             'ID' => $post_id,
+                             'post_title' => $title,
+                             'post_content' => $desc,
+                         ]);
+                         Logger::log("Updated existing post content for $post_id: $title");
+                     }
+                 }
+                 
+                 if ($audio) {
+                     $old_audio = get_post_meta($post_id, '_podify_audio_url', true);
+                     if ($old_audio !== $audio) {
+                         update_post_meta($post_id, '_podify_audio_url', esc_url_raw($audio)); 
+                         Logger::log("Updated audio for post $post_id");
+                     }
                  }
                  if ($image) { 
-                     update_post_meta($post_id, '_podify_episode_image', esc_url_raw($image)); 
-                     self::set_featured_image($post_id, $image);
+                     $old_img = get_post_meta($post_id, '_podify_episode_image', true);
+                     if ($old_img !== $image) {
+                         update_post_meta($post_id, '_podify_episode_image', esc_url_raw($image)); 
+                         self::set_featured_image($post_id, $image);
+                     }
                  }
-                 if ($duration) { update_post_meta($post_id, '_podify_duration', sanitize_text_field($duration)); }
-                 if ($tags) { update_post_meta($post_id, '_podify_tags', sanitize_text_field($tags)); }
-                 if ($feed_id) { update_post_meta($post_id, 'podify_feed_id', intval($feed_id)); }
+                 if ($duration) { 
+                     $old_dur = get_post_meta($post_id, '_podify_duration', true);
+                     if ($old_dur !== $duration) {
+                         update_post_meta($post_id, '_podify_duration', sanitize_text_field($duration)); 
+                     }
+                 }
+                 if ($tags) { 
+                     $old_tags = get_post_meta($post_id, '_podify_tags', true);
+                     if ($old_tags !== $tags) {
+                         update_post_meta($post_id, '_podify_tags', sanitize_text_field($tags)); 
+                     }
+                 }
+                 if ($feed_id) { 
+                     $old_feed = get_post_meta($post_id, 'podify_feed_id', true);
+                     if (intval($old_feed) !== intval($feed_id)) {
+                         update_post_meta($post_id, 'podify_feed_id', intval($feed_id)); 
+                     }
+                 }
                  
                  // Sync Categories
                  if (!empty($categories)) {
-                     $cat_ids = [];
-                     foreach ($categories as $cname) {
-                         $term = term_exists($cname, 'category');
-                         if (!$term) {
-                             $term = wp_insert_term($cname, 'category');
+                     $current_terms = wp_get_object_terms($post_id, 'category', ['fields' => 'names']);
+                     $diff1 = array_diff($categories, $current_terms);
+                     $diff2 = array_diff($current_terms, $categories);
+                     
+                     if (!empty($diff1) || !empty($diff2)) {
+                         $cat_ids = [];
+                         foreach ($categories as $cname) {
+                             $term = term_exists($cname, 'category');
+                             if (!$term) { $term = wp_insert_term($cname, 'category'); }
+                             if (!is_wp_error($term) && isset($term['term_id'])) { $cat_ids[] = intval($term['term_id']); }
                          }
-                         if (!is_wp_error($term) && isset($term['term_id'])) {
-                             $cat_ids[] = intval($term['term_id']);
-                         }
-                     }
-                     if (!empty($cat_ids)) {
-                         // Use false to REPLACE existing categories (removing Uncategorized)
-                         wp_set_object_terms($post_id, $cat_ids, 'category', false);
+                         if (!empty($cat_ids)) { wp_set_object_terms($post_id, $cat_ids, 'category', false); }
                      }
                  }
             } else {
@@ -603,6 +676,7 @@ class Importer {
                  ];
                  $new_post_id = wp_insert_post($postarr, true);
                  if (!is_wp_error($new_post_id) && $new_post_id) {
+                     Logger::log("Created new WP post $new_post_id for episode: $title");
                      $wpdb->update($table, ['post_id' => intval($new_post_id)], ['id' => intval($rowId)]);
                      if ($audio) { update_post_meta($new_post_id, '_podify_audio_url', esc_url_raw($audio)); }
                      if ($image) { 
@@ -631,7 +705,8 @@ class Importer {
                          }
                      }
                  } else {
-                     Logger::log('Importer: Failed to create WP post for episode "'.$title.'"');
+                     $error_msg = is_wp_error($new_post_id) ? $new_post_id->get_error_message() : 'Unknown error';
+                     Logger::error('Importer: Failed to create WP post for episode "'.$title.'". Error: ' . $error_msg);
                  }
             }
 
@@ -656,6 +731,8 @@ class Importer {
         if (function_exists('wp_defer_comment_counting')) wp_defer_comment_counting(false);
         
         Database::set_feed_last_sync($feed_id);
+        Logger::log("Import for feed $feed_id completed successfully. Total episodes processed: $count");
+        delete_transient($lock_key);
         return ['ok' => true, 'message' => 'Import completed', 'imported' => $count];
     }
     public static function resync_feed($feed_id) {
@@ -664,8 +741,7 @@ class Importer {
         if (!$feed_id) {
             return ['ok' => false, 'message' => 'Invalid feed_id'];
         }
-        // Don't delete existing episodes, just update them to preserve post_id mapping
-        // $wpdb->delete("{$wpdb->prefix}podify_podcast_episodes", ['feed_id' => $feed_id]);
-        return self::import_feed($feed_id, false);
+        // Force sync to update all episodes and images
+        return self::import_feed($feed_id, true);
     }
 }
