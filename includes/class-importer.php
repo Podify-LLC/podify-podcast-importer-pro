@@ -540,6 +540,12 @@ class Importer {
             $feed_id = $item_data['feed_id'];
 
             if ($post_id > 0) {
+                 // Update post content if changed
+                 wp_update_post([
+                     'ID' => $post_id,
+                     'post_content' => $desc,
+                 ]);
+                 
                  if ($audio) { 
                      update_post_meta($post_id, '_podify_audio_url', esc_url_raw($audio)); 
                      Logger::log("Updated audio for post $post_id: $audio");

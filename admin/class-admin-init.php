@@ -404,7 +404,7 @@ class AdminInit {
         } elseif ($tab === 'scheduled') {
             echo '<div class="podify-table-card">';
             echo '<table class="podify-modern-table">';
-            echo '<thead><tr><th style="width:60px">ID</th><th>Feed Source</th><th style="width:640px; text-align:right;">Actions</th></tr></thead>';
+            echo '<thead><tr><th style="width:60px">ID</th><th>Feed Source</th><th style="width:150px">Next Sync</th><th style="width:640px; text-align:right;">Actions</th></tr></thead>';
             echo '<tbody>';
             if ($feeds) {
                 foreach ($feeds as $f) {
@@ -417,9 +417,25 @@ class AdminInit {
                     $read_more = $opts['read_more_text'] ?? '';
                     $load_more = $opts['load_more_text'] ?? '';
                     
+                    // Next Sync Logic
+                    $next_sync = wp_next_scheduled(\PodifyPodcast\Core\Cron\CronInit::HOOK_FEED, [$id]);
+                    $next_sync_html = '<span class="podify-badge podify-badge-outline">Manual Only</span>';
+                    if ($next_sync) {
+                        $diff = $next_sync - time();
+                        if ($diff > 0) {
+                            $hours = floor($diff / 3600);
+                            $mins = floor(($diff % 3600) / 60);
+                            $next_sync_html = '<span class="podify-badge podify-badge-primary podify-next-sync-timer" data-time="'.$next_sync.'" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">' . 
+                                ($hours > 0 ? $hours . 'h ' : '') . $mins . 'm</span>';
+                        } else {
+                            $next_sync_html = '<span class="podify-badge podify-badge-success">Syncing...</span>';
+                        }
+                    }
+                    
                     echo '<tr>';
                     echo '<td><span class="podify-badge">#'.$id.'</span></td>';
                     echo '<td><div class="podify-url-text" title="'.$url.'">'.$url.'</div></td>';
+                    echo '<td>'.$next_sync_html.'</td>';
                     
                     echo '<td style="text-align:right;">';
                     echo '<div class="podify-actions-cell" style="display:flex; gap:12px; justify-content:flex-end; align-items:center;">';
@@ -436,7 +452,7 @@ class AdminInit {
 
                     // Customization Row
                     echo '<tr id="podify-customization-'.$id.'" class="podify-customization-row" style="display:none; background:#f8fafc;">';
-                    echo '<td colspan="3" style="padding:25px; border-bottom:2px solid #e2e8f0;">';
+                    echo '<td colspan="4" style="padding:25px; border-bottom:2px solid #e2e8f0;">';
                     echo '<form method="post" class="podify-feed-options-form">';
                     echo '<input type="hidden" name="podify_action" value="update_feed_options"><input type="hidden" name="feed_id" value="'.$id.'">';
                     wp_nonce_field('podify_update_feed');
@@ -489,7 +505,7 @@ class AdminInit {
                     echo '</form></td></tr>';
                 }
             } else {
-                echo '<tr><td colspan="3" style="text-align:center; padding:40px; color:#64748b;">No scheduled imports found. <a href="'.$base.'&tab=import">Add one now</a>.</td></tr>';
+                echo '<tr><td colspan="4" style="text-align:center; padding:40px; color:#64748b;">No scheduled imports found. <a href="'.$base.'&tab=import">Add one now</a>.</td></tr>';
             }
             echo '</tbody></table>';
             echo '</div>';
@@ -498,6 +514,20 @@ class AdminInit {
             echo 'const RESYNC_URL = '.wp_json_encode($resync_url).';';
             echo 'const PROGRESS_URL = '.wp_json_encode($progress_url).';';
             echo 'const NONCE = '.wp_json_encode($nonce).';';
+            
+            // Real-time Next Sync Timer
+            echo 'setInterval(function(){';
+            echo '  document.querySelectorAll(".podify-next-sync-timer").forEach(function(el){';
+            echo '    var next = parseInt(el.getAttribute("data-time"));';
+            echo '    var now = Math.floor(Date.now() / 1000);';
+            echo '    var diff = next - now;';
+            echo '    if(diff <= 0) { el.textContent = "Syncing..."; el.className = "podify-badge podify-badge-success"; return; }';
+            echo '    var h = Math.floor(diff / 3600);';
+            echo '    var m = Math.floor((diff % 3600) / 60);';
+            echo '    el.textContent = (h > 0 ? h + "h " : "") + m + "m";';
+            echo '  });';
+            echo '}, 60000);';
+
             echo 'function poll(id, btn, origText) {';
             echo '  var wrap = document.querySelector(".podify-progress-wrap[data-id=\'"+id+"\']");';
             echo '  var bar = wrap ? wrap.querySelector(".podify-progress-bar") : null;';
