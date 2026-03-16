@@ -2,6 +2,23 @@
 
 All notable changes to **Podify Podcast Importer Pro** are documented here.
 
+## 1.0.39
+### Title
+- Sync Reliability & Dashboard Enhancements
+
+### Added
+- **Dashboard**: Real-time "Next Sync" timer in the Scheduled Imports table.
+- **Sync**: Dynamic Title and Content synchronization between RSS feed and WordPress posts.
+- **Typography**: Support for custom Font Family, Letter Spacing, and Line Height for episode titles.
+
+### Changed
+- **Sync**: Refactored the Auto-Sync engine for 100% reliability with multiple feeds.
+- **Sync**: Improved "Missing Post Recovery" to recreate deleted WordPress posts without duplicating database records.
+- **Sync**: Implemented "Artwork Auto-Refresh" to update featured images if the RSS artwork URL changes.
+- **UI**: Updated card thumbnails to a 1:1 square aspect ratio with proper containment.
+- **UI**: Stabilized card and button layouts to remain stationary on hover.
+- **Styling**: Increased CSS specificity and implemented theme resets to resolve conflicts with aggressive themes (e.g., cmsmasters).
+
 ## 1.0.38
 ### Title
 - Admin Dashboard Redesign & Per-Feed Text Styling
