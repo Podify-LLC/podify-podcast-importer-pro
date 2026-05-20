@@ -36,7 +36,7 @@ class FrontendInit {
         $player_html = self::generate_single_player_html($post_id);
         
         if ($player_html) {
-            return $player_html . make_clickable($content);
+            return $player_html . '<div class="podify-episode-content">' . make_clickable($content) . '</div>';
         }
 
         return $content;
@@ -194,44 +194,7 @@ class FrontendInit {
         self::enqueue_assets();
         
         $dynamic_css = '';
-        // Increase global specificity by using html body prefix
-        if (!empty($settings['card_bg_color'])) {
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-episode-card { background-color: ' . esc_attr($settings['card_bg_color']) . ' !important; }';
-        }
-        if (!empty($settings['button_bg_color'])) {
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-read-more { background: ' . esc_attr($settings['button_bg_color']) . ' !important; border-color: ' . esc_attr($settings['button_bg_color']) . ' !important; }';
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-play-action-btn svg { color: ' . esc_attr($settings['button_bg_color']) . ' !important; }';
-        }
-        if (!empty($settings['button_text_color'])) {
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-read-more { color: ' . esc_attr($settings['button_text_color']) . ' !important; }';
-        }
-        if (!empty($settings['title_font'])) {
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-episode-title, html body .podify-episodes-grid .podify-episode-title a { font-family: ' . $settings['title_font'] . ' !important; }';
-        }
-        if (!empty($settings['title_letter_spacing'])) {
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-episode-title, html body .podify-episodes-grid .podify-episode-title a { letter-spacing: ' . $settings['title_letter_spacing'] . ' !important; }';
-        }
-        if (!empty($settings['title_line_height'])) {
-            $dynamic_css .= 'html body .podify-episodes-grid .podify-episode-title, html body .podify-episodes-grid .podify-episode-title a { line-height: ' . $settings['title_line_height'] . ' !important; }';
-        }
-
-        // Default Load More styles from global settings
-        if (!empty($settings['load_more_bg_color'])) {
-            $lmbg = esc_attr($settings['load_more_bg_color']);
-            $dynamic_css .= "html body .podify-load-more-wrap button.podify-load-more { background-color: {$lmbg} !important; background: {$lmbg} !important; border-color: {$lmbg} !important; }";
-        }
-        if (!empty($settings['load_more_text_color'])) {
-            $lmtxt = esc_attr($settings['load_more_text_color']);
-            $dynamic_css .= "html body .podify-load-more-wrap button.podify-load-more { color: {$lmtxt} !important; }";
-        }
-        if (!empty($settings['load_more_bg_hover_color'])) {
-            $lmbgh = esc_attr($settings['load_more_bg_hover_color']);
-            $dynamic_css .= "html body .podify-load-more-wrap button.podify-load-more:hover { background-color: {$lmbgh} !important; background: {$lmbgh} !important; border-color: {$lmbgh} !important; }";
-        }
-        if (!empty($settings['load_more_text_hover_color'])) {
-            $lmtxth = esc_attr($settings['load_more_text_hover_color']);
-            $dynamic_css .= "html body .podify-load-more-wrap button.podify-load-more:hover { color: {$lmtxth} !important; }";
-        }
+        // Default global styling is handled by frontend.css.
         
         // Force Border Radius Global
         $dynamic_css .= "html body .podify-load-more-wrap button.podify-load-more { border-radius: 8px !important; }";
@@ -251,13 +214,22 @@ class FrontendInit {
                 if ($c1) {
                     $cat_css .= "html body .podify-episodes-grid .podify-cat-{$cat_id}, ";
                     $cat_css .= "html body .podify-episodes-grid.podify-cat-{$cat_id} .podify-episode-card { background-color: " . esc_attr($c1) . " !important; }";
+                    // Support for List Layout cards in global category styles
+                    $cat_css .= "html body .podify-episodes-grid.podify-list-layout .podify-cat-{$cat_id}, ";
+                    $cat_css .= "html body .podify-episodes-grid.podify-list-layout .podify-list-layout-card.podify-cat-{$cat_id}, ";
+                    $cat_css .= "html body .podify-episodes-grid.podify-list-layout .podify-cat-{$cat_id}.podify-list-layout-card, ";
+                    $cat_css .= "html body .podify-episodes-grid.podify-list-layout.podify-cat-{$cat_id} .podify-list-layout-card { background: " . esc_attr($c1) . " !important; }";
                 }
                 
                 if ($cat['button_bg_color']) {
                     $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-read-more, ";
                     $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-read-more { background: " . esc_attr($cat['button_bg_color']) . " !important; border-color: " . esc_attr($cat['button_bg_color']) . " !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-list-play-btn, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-list-play-btn { background: " . esc_attr($cat['button_bg_color']) . " !important; border-color: " . esc_attr($cat['button_bg_color']) . " !important; }";
                     $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-play-action-btn svg, ";
                     $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-play-action-btn svg { color: " . esc_attr($cat['button_bg_color']) . " !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-category-pill, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-category-pill { background-color: " . esc_attr($cat['button_bg_color']) . " !important; background: " . esc_attr($cat['button_bg_color']) . " !important; }";
                     
                     // Reset pseudo-elements for read-more
                     $cat_css .= "html body div.podify-episodes-grid .podify-cat-{$cat_id} .podify-read-more:before, ";
@@ -266,6 +238,12 @@ class FrontendInit {
                 if ($cat['button_text_color']) {
                     $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-read-more, ";
                     $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-read-more { color: " . esc_attr($cat['button_text_color']) . " !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-list-play-btn, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-list-play-btn { color: " . esc_attr($cat['button_text_color']) . " !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-list-play-btn svg, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-list-play-btn svg { color: " . esc_attr($cat['button_text_color']) . " !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id} .podify-category-pill, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-category-pill { color: " . esc_attr($cat['button_text_color']) . " !important; }";
                 }
                 if ($cat['title_color']) {
                     $tc = esc_attr($cat['title_color']);
@@ -314,10 +292,14 @@ class FrontendInit {
                 if ($cat['load_more_bg_hover_color']) {
                     $lmbgh = esc_attr($cat['load_more_bg_hover_color']);
                     $cat_css .= "html body .podify-load-more-wrap.podify-cat-{$cat_id} button.podify-load-more:hover { background-color: {$lmbgh} !important; background: {$lmbgh} !important; border-color: {$lmbgh} !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id}:hover .podify-category-pill, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-episode-card:hover .podify-category-pill { background-color: {$lmbgh} !important; background: {$lmbgh} !important; }";
                 }
                 if ($cat['load_more_text_hover_color']) {
                     $lmtxth = esc_attr($cat['load_more_text_hover_color']);
                     $cat_css .= "html body .podify-load-more-wrap.podify-cat-{$cat_id} button.podify-load-more:hover { color: {$lmtxth} !important; }";
+                    $cat_css .= "html body div.podify-episodes-grid div.podify-cat-{$cat_id}:hover .podify-category-pill, ";
+                    $cat_css .= "html body div.podify-episodes-grid.podify-cat-{$cat_id} .podify-episode-card:hover .podify-category-pill { color: {$lmtxth} !important; }";
                 }
                 
                 if ($cat_css) {
@@ -352,20 +334,34 @@ class FrontendInit {
         if ($h > 0) return sprintf('%d:%02d:%02d', $h, $m, $se);
         return sprintf('%d:%02d', $m, $se);
     }
+    private static function format_duration_label($d) {
+        $sec = self::duration_seconds($d);
+        if ($sec <= 0) return '';
+        $h = intdiv($sec, 3600);
+        $m = intdiv($sec % 3600, 60);
+        if ($h > 0) {
+            return $m > 0 ? ($h . 'h ' . $m . 'm') : ($h . 'h');
+        }
+        $min = max(1, (int) round($sec / 60));
+        return $min . ' min';
+    }
     private static function enqueue_assets() {
         // Append time to version to bust cache for CSS and JS
         wp_enqueue_style('podify_frontend', \PODIFY_PODCAST_URL . 'assets/css/frontend.css', [], \PODIFY_PODCAST_VERSION . '.' . time());
         wp_enqueue_script('podify_frontend_js', \PODIFY_PODCAST_URL . 'assets/js/frontend-player.js', [], \PODIFY_PODCAST_VERSION . '.' . time(), true);
     }
     public static function render_list($atts = []) {
+        $raw_atts = is_array($atts) ? $atts : [];
+        $layout_attr_provided = array_key_exists('layout', $raw_atts);
         $atts = shortcode_atts([
             'cols' => 3,
             'limit' => '', 
             'feed_id' => '',
             'category_id' => '',
             'category' => '', 
-            'layout' => 'classic'
-        ], (array)$atts, 'podify_podcast_list');
+            'layout' => 'classic',
+            'show_categories' => ''
+        ], $raw_atts, 'podify_podcast_list');
 
         self::enqueue_assets();
 
@@ -379,10 +375,13 @@ class FrontendInit {
         $read_more_text = !empty($settings['read_more_text']) ? $settings['read_more_text'] : 'Read more';
         $load_more_text = !empty($settings['load_more_text']) ? $settings['load_more_text'] : 'Load more';
 
-        // Feed-specific text styling defaults
-        $meta_font = ''; $meta_color = '';
-        $card_bg_feed = '';
-        $date_color_feed = '';
+        $show_category_badge = true;
+        if (isset($atts['show_categories']) && $atts['show_categories'] !== '') {
+            $show_category_badge = filter_var($atts['show_categories'], FILTER_VALIDATE_BOOLEAN);
+        }
+        $pill_color_category_id = 0;
+        $default_layout_feed = '';
+        $default_style = [];
 
         // Feed-specific overrides
         if ($feed_id) {
@@ -392,32 +391,38 @@ class FrontendInit {
                 if ($fopts) {
                     if (!empty($fopts['read_more_text'])) $read_more_text = $fopts['read_more_text'];
                     if (!empty($fopts['load_more_text'])) $load_more_text = $fopts['load_more_text'];
-                    
-                    // Text Styling Overrides
-                    if (!empty($fopts['meta_font'])) $meta_font = $fopts['meta_font'];
-                    if (!empty($fopts['meta_color'])) $meta_color = $fopts['meta_color'];
-                    if (!empty($fopts['date_color'])) $date_color_feed = $fopts['date_color'];
-                    
-                    // Card Styling Overrides
-                    if (!empty($fopts['card_bg_color'])) $card_bg_feed = $fopts['card_bg_color'];
+                    if (array_key_exists('show_category_badge', $fopts) && (!isset($atts['show_categories']) || $atts['show_categories'] === '')) {
+                        $show_category_badge = !empty($fopts['show_category_badge']);
+                    }
+                    if (!empty($fopts['pill_color_category_id'])) $pill_color_category_id = intval($fopts['pill_color_category_id']);
+                    if (!empty($fopts['default_layout'])) $default_layout_feed = sanitize_key($fopts['default_layout']);
+                    $default_style = is_array($fopts) ? $fopts : [];
                 }
             }
         }
         
         // Normalize layout
         $layout_raw = sanitize_key($atts['layout']);
-        $layout = ($layout_raw === 'modern') ? 'modern' : 'classic';
+        if (!$layout_attr_provided && $default_layout_feed && in_array($default_layout_feed, ['classic','modern','list'], true)) {
+            $layout_raw = $default_layout_feed;
+        }
+        $layout = in_array($layout_raw, ['modern', 'list'], true) ? $layout_raw : 'classic';
         $is_modern = ($layout === 'modern');
+        $is_list = ($layout === 'list');
 
         // Resolve category slug/name to ID if needed
         $cat_param = isset($atts['category']) ? trim((string)$atts['category']) : '';
+        $uncategorized = false;
+        if (!$category_id && $cat_param && strtolower($cat_param) === 'uncategorized') {
+            $uncategorized = true;
+        }
         
         // If category param is numeric, treat it as ID first
         if (!$category_id && is_numeric($cat_param) && intval($cat_param) > 0) {
             $category_id = intval($cat_param);
         }
 
-        if (!$category_id && $cat_param) {
+        if (!$category_id && !$uncategorized && $cat_param) {
             $cat_slug = sanitize_title($cat_param);
             $cats_for_feed = \PodifyPodcast\Core\Database::get_categories($feed_id ?: null);
             if (is_array($cats_for_feed)) {
@@ -433,13 +438,7 @@ class FrontendInit {
             }
         }
 
-        // If still no category_id but we have a feed_id, check if that feed is mapped to a category
-        if (!$category_id && $feed_id) {
-            $feed_cats = \PodifyPodcast\Core\Database::get_categories(intval($feed_id));
-            if (!empty($feed_cats)) {
-                $category_id = intval($feed_cats[0]['id']);
-            }
-        }
+        $is_default_view = (bool)($feed_id && !$category_id && ($cat_param === '' || $uncategorized));
 
         if ($feed_id && current_user_can('manage_options')) {
             $feed_row = \PodifyPodcast\Core\Database::get_feed($feed_id);
@@ -460,10 +459,67 @@ class FrontendInit {
             }
         }
 
-        $episodes = \PodifyPodcast\Core\Database::get_episodes($feed_id ?: null, $limit, 0, $category_id ?: null);
+        if ($uncategorized) {
+            $episodes = \PodifyPodcast\Core\Database::get_episodes_advanced([
+                'feed_id' => $feed_id ?: null,
+                'limit' => $limit,
+                'offset' => 0,
+                'uncategorized' => true,
+            ]);
+        } else {
+            $episodes = \PodifyPodcast\Core\Database::get_episodes($feed_id ?: null, $limit, 0, $category_id ?: null);
+        }
+
+        // Fallback: If feed_id is not provided, detect it from the first episode to load correct styling/settings
+        if (!$feed_id && !empty($episodes) && is_array($episodes)) {
+            $first_ep = $episodes[0];
+            if (!empty($first_ep['feed_id'])) {
+                $feed_id = intval($first_ep['feed_id']);
+                $feed_row = \PodifyPodcast\Core\Database::get_feed($feed_id);
+                if ($feed_row && !empty($feed_row['options'])) {
+                    $fopts = json_decode($feed_row['options'], true);
+                    if ($fopts) {
+                        if (!empty($fopts['read_more_text'])) $read_more_text = $fopts['read_more_text'];
+                        if (!empty($fopts['load_more_text'])) $load_more_text = $fopts['load_more_text'];
+                        if (array_key_exists('show_category_badge', $fopts) && (!isset($atts['show_categories']) || $atts['show_categories'] === '')) {
+                            $show_category_badge = !empty($fopts['show_category_badge']);
+                        }
+                        if (!empty($fopts['pill_color_category_id'])) $pill_color_category_id = intval($fopts['pill_color_category_id']);
+                        if (!empty($fopts['default_layout']) && !$layout_attr_provided) {
+                            $layout_raw = sanitize_key($fopts['default_layout']);
+                            $layout = in_array($layout_raw, ['modern', 'list'], true) ? $layout_raw : 'classic';
+                            $is_modern = ($layout === 'modern');
+                            $is_list = ($layout === 'list');
+                        }
+                        $default_style = is_array($fopts) ? $fopts : [];
+                    }
+                }
+            }
+        }
+
+        $has_default_style = false;
+        if (!empty($default_style) && is_array($default_style)) {
+            foreach ([
+                'default_card_bg_color',
+                'default_card_border_color',
+                'default_title_color',
+                'default_desc_color',
+                'default_meta_color',
+                'default_button_bg_color',
+                'default_button_text_color',
+                'default_button_bg_hover_color',
+                'default_button_text_hover_color',
+                'default_pill_bg_color',
+                'default_pill_text_color',
+                'default_pill_bg_hover_color',
+                'default_pill_text_hover_color',
+            ] as $k) {
+                if (!empty($default_style[$k])) { $has_default_style = true; break; }
+            }
+        }
 
         // Always output invisible debug info for troubleshooting
-        $debug_info = "<!-- Podify Debug: FeedID={$feed_id}, CatParam={$cat_param}, ResolvedCatID={$category_id}, Count=" . (is_array($episodes) ? count($episodes) : 0) . " -->";
+        $debug_info = "<!-- Podify Debug: FeedID={$feed_id}, CatParam={$cat_param}, ResolvedCatID={$category_id}, Layout={$layout}, FeedDefaultLayout={$default_layout_feed}, DefaultView=" . ($is_default_view ? '1' : '0') . ", HasDefaultStyle=" . ($has_default_style ? '1' : '0') . ", Uncategorized=" . ($uncategorized ? '1' : '0') . ", Count=" . (is_array($episodes) ? count($episodes) : 0) . " -->";
 
         if (!$episodes) {
             $debug = '';
@@ -473,11 +529,18 @@ class FrontendInit {
                 $debug .= 'Feed ID: ' . esc_html($feed_id) . '<br>';
                 $debug .= 'Category Param: ' . esc_html($cat_param) . '<br>';
                 $debug .= 'Resolved Category ID: ' . esc_html($category_id) . '<br>';
+                $debug .= 'Uncategorized: ' . ($uncategorized ? 'Yes' : 'No') . '<br>';
                 
                 $total_feed = \PodifyPodcast\Core\Database::count_episodes($feed_id);
                 $debug .= 'Total Episodes in Feed: ' . intval($total_feed) . '<br>';
                 
-                if ($category_id) {
+                if ($uncategorized) {
+                    $total_uncat = \PodifyPodcast\Core\Database::count_episodes_advanced([
+                        'feed_id' => $feed_id ?: null,
+                        'uncategorized' => true,
+                    ]);
+                    $debug .= 'Uncategorized Episodes: ' . intval($total_uncat) . '<br>';
+                } elseif ($category_id) {
                     $total_cat = \PodifyPodcast\Core\Database::count_episodes($feed_id, $category_id);
                     $debug .= 'Episodes in Category ' . $category_id . ': ' . intval($total_cat) . '<br>';
                 } else if ($cat_param) {
@@ -491,16 +554,140 @@ class FrontendInit {
 
         $container_id = 'podify-ep-'.wp_generate_uuid4();
         
-        // Dynamic CSS for Feed-specific text styling
         $feed_text_css = '';
-        
-        if ($meta_font) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-meta { font-family: " . $meta_font . " !important; }";
-        if ($meta_color) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-meta { color: " . esc_attr($meta_color) . " !important; }";
-        if ($date_color_feed) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-date { color: " . esc_attr($date_color_feed) . " !important; }";
+        if ($feed_id && $default_style) {
+            $bg = !empty($default_style['default_card_bg_color']) ? $default_style['default_card_bg_color'] : '';
+            $border = !empty($default_style['default_card_border_color']) ? $default_style['default_card_border_color'] : '';
+            $title_c = !empty($default_style['default_title_color']) ? $default_style['default_title_color'] : '';
+            $desc_c = !empty($default_style['default_desc_color']) ? $default_style['default_desc_color'] : '';
+            $meta_c = !empty($default_style['default_meta_color']) ? $default_style['default_meta_color'] : '';
+            $btn_bg = !empty($default_style['default_button_bg_color']) ? $default_style['default_button_bg_color'] : '';
+            $btn_txt = !empty($default_style['default_button_text_color']) ? $default_style['default_button_text_color'] : '';
+            $btn_bg_h = !empty($default_style['default_button_bg_hover_color']) ? $default_style['default_button_bg_hover_color'] : '';
+            $btn_txt_h = !empty($default_style['default_button_text_hover_color']) ? $default_style['default_button_text_hover_color'] : '';
+            $pill_bg = !empty($default_style['default_pill_bg_color']) ? $default_style['default_pill_bg_color'] : '';
+            $pill_txt = !empty($default_style['default_pill_text_color']) ? $default_style['default_pill_text_color'] : '';
+            $pill_bg_h = !empty($default_style['default_pill_bg_hover_color']) ? $default_style['default_pill_bg_hover_color'] : '';
+            $pill_txt_h = !empty($default_style['default_pill_text_hover_color']) ? $default_style['default_pill_text_hover_color'] : '';
 
-        if ($feed_text_css) {
-            wp_add_inline_style('podify_frontend', $feed_text_css);
+            if ($is_list) {
+                if ($bg) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-list-layout-card { background: " . esc_attr($bg) . " !important; background-color: " . esc_attr($bg) . " !important; }";
+                }
+                if ($border) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-list-layout-card { border-color: " . esc_attr($border) . " !important; }";
+            } else {
+                if ($bg) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card { background-color: " . esc_attr($bg) . " !important; }";
+                if ($border) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card { border-color: " . esc_attr($border) . " !important; }";
+            }
+            if ($title_c) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-title, html body #{$container_id}.podify-episodes-grid .podify-episode-title a, html body #{$container_id}.podify-episodes-grid .podify-episode-link { color: " . esc_attr($title_c) . " !important; }";
+            if ($desc_c) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-desc { color: " . esc_attr($desc_c) . " !important; }";
+            if ($meta_c) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-meta, html body #{$container_id}.podify-episodes-grid .podify-episode-date, html body #{$container_id}.podify-episodes-grid .podify-list-date, html body #{$container_id}.podify-episodes-grid .podify-list-duration { color: " . esc_attr($meta_c) . " !important; }";
+
+            if ($btn_bg) {
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-read-more { background: " . esc_attr($btn_bg) . " !important; border-color: " . esc_attr($btn_bg) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn { background: " . esc_attr($btn_bg) . " !important; border-color: " . esc_attr($btn_bg) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-play-action-btn svg { color: " . esc_attr($btn_bg) . " !important; }";
+            }
+            if ($btn_txt) {
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-read-more { color: " . esc_attr($btn_txt) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn { color: " . esc_attr($btn_txt) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn svg { color: " . esc_attr($btn_txt) . " !important; }";
+            }
+            if ($btn_bg_h) {
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-read-more:hover { background: " . esc_attr($btn_bg_h) . " !important; border-color: " . esc_attr($btn_bg_h) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn:hover { background: " . esc_attr($btn_bg_h) . " !important; border-color: " . esc_attr($btn_bg_h) . " !important; }";
+            }
+            if ($btn_txt_h) {
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-read-more:hover { color: " . esc_attr($btn_txt_h) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn:hover { color: " . esc_attr($btn_txt_h) . " !important; }";
+                $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn:hover svg { color: " . esc_attr($btn_txt_h) . " !important; }";
+            }
+
+            if ($is_list) {
+                if ($pill_bg) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-category-pill { background: " . esc_attr($pill_bg) . " !important; }";
+                if ($pill_txt) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-category-pill { color: " . esc_attr($pill_txt) . " !important; }";
+                if ($pill_bg_h) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-list-layout-card:hover .podify-category-pill { background: " . esc_attr($pill_bg_h) . " !important; }";
+                if ($pill_txt_h) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-list-layout-card:hover .podify-category-pill { color: " . esc_attr($pill_txt_h) . " !important; }";
+            }
+
+            // Load More Button Styling for Default Feed Style
+            if ($btn_bg) {
+                $feed_text_css .= "html body .podify-load-more-wrap button.podify-load-more[data-target=\"{$container_id}\"] { background-color: " . esc_attr($btn_bg) . " !important; background: " . esc_attr($btn_bg) . " !important; border-color: " . esc_attr($btn_bg) . " !important; }";
+            }
+            if ($btn_txt) {
+                $feed_text_css .= "html body .podify-load-more-wrap button.podify-load-more[data-target=\"{$container_id}\"] { color: " . esc_attr($btn_txt) . " !important; }";
+            }
+            if ($btn_bg_h) {
+                $feed_text_css .= "html body .podify-load-more-wrap button.podify-load-more[data-target=\"{$container_id}\"]:hover { background-color: " . esc_attr($btn_bg_h) . " !important; background: " . esc_attr($btn_bg_h) . " !important; border-color: " . esc_attr($btn_bg_h) . " !important; }";
+            }
+            if ($btn_txt_h) {
+                $feed_text_css .= "html body .podify-load-more-wrap button.podify-load-more[data-target=\"{$container_id}\"]:hover { color: " . esc_attr($btn_txt_h) . " !important; }";
+            }
         }
+        
+        if ($pill_color_category_id > 0) {
+            $pill_cat = \PodifyPodcast\Core\Database::get_category($pill_color_category_id);
+            if ($pill_cat && (!$feed_id || intval($pill_cat['feed_id']) === intval($feed_id))) {
+                $pill_bg = !empty($pill_cat['button_bg_color']) ? $pill_cat['button_bg_color'] : (!empty($pill_cat['load_more_bg_color']) ? $pill_cat['load_more_bg_color'] : '');
+                $pill_txt = !empty($pill_cat['button_text_color']) ? $pill_cat['button_text_color'] : (!empty($pill_cat['load_more_text_color']) ? $pill_cat['load_more_text_color'] : '');
+                $pill_hover = !empty($pill_cat['load_more_bg_hover_color']) ? $pill_cat['load_more_bg_hover_color'] : $pill_bg;
+                $pill_hover_txt = !empty($pill_cat['load_more_text_hover_color']) ? $pill_cat['load_more_text_hover_color'] : $pill_txt;
+                if ($pill_bg) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-category-pill { background-color: " . esc_attr($pill_bg) . " !important; background: " . esc_attr($pill_bg) . " !important; }";
+                if ($pill_txt) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-category-pill { color: " . esc_attr($pill_txt) . " !important; }";
+                if ($pill_hover) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat:hover .podify-category-pill { background-color: " . esc_attr($pill_hover) . " !important; background: " . esc_attr($pill_hover) . " !important; }";
+                if ($pill_hover_txt) $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat:hover .podify-category-pill { color: " . esc_attr($pill_hover_txt) . " !important; }";
+
+                if (!empty($pill_cat['card_bg_color'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat { background-color: " . esc_attr($pill_cat['card_bg_color']) . " !important; }";
+                }
+                if (!empty($pill_cat['title_color'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title, ";
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title a, ";
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-link { color: " . esc_attr($pill_cat['title_color']) . " !important; }";
+                }
+                if (!empty($pill_cat['title_font'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title, ";
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title a { font-family: " . $pill_cat['title_font'] . " !important; }";
+                }
+                if (!empty($pill_cat['title_letter_spacing'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title, ";
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title a { letter-spacing: " . $pill_cat['title_letter_spacing'] . " !important; }";
+                }
+                if (!empty($pill_cat['title_line_height'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title, ";
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-title a { line-height: " . $pill_cat['title_line_height'] . " !important; }";
+                }
+                if (!empty($pill_cat['desc_color'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-episode-desc { color: " . esc_attr($pill_cat['desc_color']) . " !important; }";
+                }
+                if (!empty($pill_cat['button_bg_color'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-read-more { background: " . esc_attr($pill_cat['button_bg_color']) . " !important; border-color: " . esc_attr($pill_cat['button_bg_color']) . " !important; }";
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-play-action-btn svg { color: " . esc_attr($pill_cat['button_bg_color']) . " !important; }";
+                }
+                if (!empty($pill_cat['button_text_color'])) {
+                    $feed_text_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card.podify-uncat .podify-read-more { color: " . esc_attr($pill_cat['button_text_color']) . " !important; }";
+                }
+                if ($uncategorized) {
+                    if (!empty($pill_cat['load_more_bg_color'])) {
+                        $lmbg_uncat = esc_attr($pill_cat['load_more_bg_color']);
+                        $feed_text_css .= "html body .podify-load-more-wrap.podify-uncategorized button.podify-load-more[data-target=\"{$container_id}\"] { background-color: {$lmbg_uncat} !important; background: {$lmbg_uncat} !important; border-color: {$lmbg_uncat} !important; }";
+                    }
+                    if (!empty($pill_cat['load_more_text_color'])) {
+                        $lmt_uncat = esc_attr($pill_cat['load_more_text_color']);
+                        $feed_text_css .= "html body .podify-load-more-wrap.podify-uncategorized button.podify-load-more[data-target=\"{$container_id}\"] { color: {$lmt_uncat} !important; }";
+                    }
+                    if (!empty($pill_cat['load_more_bg_hover_color'])) {
+                        $lmbg_uncat_h = esc_attr($pill_cat['load_more_bg_hover_color']);
+                        $feed_text_css .= "html body .podify-load-more-wrap.podify-uncategorized button.podify-load-more[data-target=\"{$container_id}\"]:hover { background-color: {$lmbg_uncat_h} !important; background: {$lmbg_uncat_h} !important; border-color: {$lmbg_uncat_h} !important; }";
+                    }
+                    if (!empty($pill_cat['load_more_text_hover_color'])) {
+                        $lmt_uncat_h = esc_attr($pill_cat['load_more_text_hover_color']);
+                        $feed_text_css .= "html body .podify-load-more-wrap.podify-uncategorized button.podify-load-more[data-target=\"{$container_id}\"]:hover { color: {$lmt_uncat_h} !important; }";
+                    }
+                }
+            }
+        }
+        $inline_css = $feed_text_css;
 
         // Dynamic CSS for the grid customization if this is a category-specific grid
         if ($category_id) {
@@ -510,12 +697,17 @@ class FrontendInit {
                 
                 // Category Card/Text Styling for this specific grid ID
                 if ($cat_data['card_bg_color']) {
-                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card { background-color: " . esc_attr($cat_data['card_bg_color']) . " !important; }";
+                    $cbg = esc_attr($cat_data['card_bg_color']);
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-card { background-color: {$cbg} !important; }";
+                    if ($is_list) {
+                        $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid.podify-list-layout .podify-list-layout-card { background: {$cbg} !important; }";
+                    }
                 }
                 if ($cat_data['title_color']) {
+                    $tc = esc_attr($cat_data['title_color']);
                     $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-title, ";
                     $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-title a, ";
-                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-link { color: " . esc_attr($cat_data['title_color']) . " !important; }";
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-link { color: {$tc} !important; }";
                 }
                 if ($cat_data['title_font']) {
                     $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-title, ";
@@ -531,6 +723,21 @@ class FrontendInit {
                 }
                 if ($cat_data['desc_color']) {
                     $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-episode-desc { color: " . esc_attr($cat_data['desc_color']) . " !important; }";
+                }
+                
+                // Add Meta Color if available (reusing meta_color from default if needed, or if we had it in cat)
+                // For now let's handle Button colors which are available in category
+                if (!empty($cat_data['button_bg_color'])) {
+                    $bbg = esc_attr($cat_data['button_bg_color']);
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-read-more { background: {$bbg} !important; border-color: {$bbg} !important; }";
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn { background: {$bbg} !important; border-color: {$bbg} !important; }";
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-play-action-btn svg { color: {$bbg} !important; }";
+                }
+                if (!empty($cat_data['button_text_color'])) {
+                    $btxt = esc_attr($cat_data['button_text_color']);
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-read-more { color: {$btxt} !important; }";
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn { color: {$btxt} !important; }";
+                    $grid_custom_css .= "html body #{$container_id}.podify-episodes-grid .podify-list-play-btn svg { color: {$btxt} !important; }";
                 }
 
                 // Load More Button Styling for this Grid (Category Specific)
@@ -559,7 +766,7 @@ class FrontendInit {
                 $grid_custom_css .= "html body .podify-load-more-wrap button.podify-load-more[data-target=\"{$container_id}\"]:after { display: none !important; content: none !important; background: none !important; background-image: none !important; opacity: 0 !important; }";
 
                 if ($grid_custom_css) {
-                    wp_add_inline_style('podify_frontend', $grid_custom_css);
+                    $inline_css .= $grid_custom_css;
                 }
             }
         }
@@ -568,8 +775,21 @@ class FrontendInit {
         if ($category_id) {
             $grid_classes .= " podify-cat-{$category_id}";
         }
+        if ($uncategorized) {
+            $grid_classes .= " podify-uncategorized";
+        }
+        if ($is_list) {
+            $grid_classes .= " podify-list-layout";
+        }
 
-        $html = $debug_info . '<div id="'.$container_id.'" class="'.$grid_classes.'" data-limit="'.$limit.'"'.($feed_id?' data-feed="'.$feed_id.'"':'').($category_id?' data-category="'.$category_id.'"':'').' data-offset="'.count($episodes).'" data-layout="'.$layout.'">';
+        $data_category_attr = '';
+        if ($uncategorized) {
+            $data_category_attr = ' data-category="uncategorized"';
+        } elseif ($category_id) {
+            $data_category_attr = ' data-category="'.$category_id.'"';
+        }
+        $style_tag = $inline_css ? '<style>'.$inline_css.'</style>' : '';
+        $html = $debug_info . $style_tag . '<div id="'.$container_id.'" class="'.$grid_classes.'" data-limit="'.$limit.'"'.($feed_id?' data-feed="'.$feed_id.'"':'').$data_category_attr.' data-offset="'.count($episodes).'" data-layout="'.$layout.'">';
         
         foreach ($episodes as $e) {
             $title = !empty($e['title']) ? esc_html($e['title']) : 'Untitled Episode';
@@ -658,7 +878,13 @@ class FrontendInit {
             $data_attrs .= ' data-duration-seconds="'.esc_attr(self::duration_seconds($dur_raw)).'"';
             
             $card_classes = 'podify-episode-card';
-            $card_classes .= $is_modern ? ' podify-modern' : ' podify-row';
+            if ($is_modern) {
+                $card_classes .= ' podify-modern';
+            } elseif ($is_list) {
+                $card_classes .= ' podify-list-layout-card';
+            } else {
+                $card_classes .= ' podify-row';
+            }
 
             // Category Classes Logic
             $applied_cat_ids = [];
@@ -677,21 +903,10 @@ class FrontendInit {
                         $applied_cat_ids[] = $cat_id_val;
                     }
                 }
+            } else {
+                $card_classes .= ' podify-uncat';
             }
             
-            // 3. Fallback: check if the feed itself is mapped to any category
-            if (empty($applied_cat_ids) && !empty($e['feed_id'])) {
-                $feed_cats = \PodifyPodcast\Core\Database::get_categories(intval($e['feed_id']));
-                if ($feed_cats) {
-                    foreach ($feed_cats as $fcat) {
-                        $cat_id_val = intval($fcat['id']);
-                        if (!in_array($cat_id_val, $applied_cat_ids)) {
-                            $applied_cat_ids[] = $cat_id_val;
-                        }
-                    }
-                }
-            }
-
             if (!empty($applied_cat_ids)) {
                 foreach ($applied_cat_ids as $aid) {
                     $card_classes .= ' podify-cat-' . $aid;
@@ -700,96 +915,167 @@ class FrontendInit {
             }
 
             $html .= '<div class="'.$card_classes.'"'.$data_attrs.'>';
-            
-            // Media Area
-            $html .= '<div class="podify-episode-media">';
-            if ($img) {
-                $html .= '<img src="'.$img.'" alt="'.$title.'" loading="lazy">';
-            } else {
-                $html .= '<div class="podify-episode-placeholder"></div>';
-            }
-            $html .= '</div>';
-            
-            // Body Area
-            $html .= '<div class="podify-episode-body">';
-            
-            // Categories Area
-            $cats_html = '';
-            if ($ep_cats) {
-                $cats_html .= '<div class="podify-episode-categories">';
-                foreach ($ep_cats as $ecat) {
-                    $cats_html .= '<span class="podify-category-pill">'.esc_html($ecat['name']).'</span>';
-                }
-                $cats_html .= '</div>';
-            }
 
+            if ($is_list) {
+                $cats_html = '';
+                if ($show_category_badge) {
+                    $cats_html .= '<div class="podify-episode-categories">';
+                    if ($ep_cats) {
+                        foreach ($ep_cats as $ecat) {
+                            $cats_html .= '<span class="podify-category-pill">'.esc_html($ecat['name']).'</span>';
+                        }
+                    } else {
+                        $cats_html .= '<span class="podify-category-pill">Uncategorized</span>';
+                    }
+                    $cats_html .= '</div>';
+                }
 
-            // Title (Linked in both layouts)
-            $html .= '<div class="podify-episode-top">';
-            if ($is_modern) {
-                $html .= $cats_html;
-            }
-            $html .= '<h3 class="podify-episode-title"><a href="'.esc_url($permalink).'" class="podify-episode-link">'.$title.'</a></h3>';
-            $html .= '</div>';
-            
-            if (!$is_modern) {
-                $html .= $cats_html;
-            }
-            
-            // Description
-            if ($desc) {
-                $html .= '<div class="podify-episode-desc podify-clamp-2">'.$desc.'</div>';
-            }
-            
-            if ($is_modern) {
-                // Modern Layout Structure
-                if ($meta_line) {
-                    $html .= '<div class="podify-episode-meta">'.$meta_line.'</div>';
+                $dur_label = self::format_duration_label($dur_raw);
+
+                $html .= '<div class="podify-episode-media podify-list-thumb">';
+                if ($img) {
+                    $html .= '<img src="'.$img.'" alt="'.$title.'" loading="lazy">';
+                } else {
+                    $html .= '<div class="podify-episode-placeholder"></div>';
                 }
-                
-                $html .= '<div class="podify-episode-actions">';
-                $html .= '<a class="podify-read-more" href="'.esc_url($permalink).'">'.esc_html($read_more_text).' <i class="fa fa-angle-right"></i></a>';
-                
+                $html .= '</div>';
+
+                $html .= '<div class="podify-episode-body podify-list-content">';
+                $html .= '<div class="podify-list-meta-row">';
+                if ($cats_html) {
+                    $html .= $cats_html;
+                }
+                if ($dur_label) {
+                    $html .= '<span class="podify-list-duration">'.esc_html($dur_label).'</span>';
+                }
+                $html .= '</div>';
+
+                $html .= '<h3 class="podify-episode-title"><a href="'.esc_url($permalink).'" class="podify-episode-link">'.$title.'</a></h3>';
+
+                if ($desc) {
+                    $html .= '<div class="podify-episode-desc podify-list-desc">'.$desc.'</div>';
+                }
+
+                $html .= '<div class="podify-list-bottom-row">';
                 if ($audio && $sticky_enabled) {
-                    $html .= '<button class="podify-play-action-btn" aria-label="Play"><svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>';
+                    $html .= '<button class="podify-play-action-btn podify-list-play-btn" aria-label="Play Episode">';
+                    $html .= '<span class="podify-list-play-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>';
+                    $html .= '<span class="podify-list-play-text">Play Episode</span>';
+                    $html .= '</button>';
+                } else {
+                    $html .= '<a class="podify-read-more podify-list-play-btn" href="'.esc_url($permalink).'">'.esc_html($read_more_text).'</a>';
                 }
-                if ($duration && $sticky_enabled) {
-                    $html .= '<span class="podify-episode-duration">'.$duration.'</span>';
+                if ($date) {
+                    $html .= '<span class="podify-list-date">'.esc_html($date).'</span>';
                 }
-                $html .= '</div>'; // End Actions
-                
+                $html .= '</div>';
+
+                $html .= '</div>'; // End Body
             } else {
-                // Classic Layout Structure
-                $html .= '<a class="podify-read-more" href="'.esc_url($permalink).'">'.esc_html($read_more_text).' <i class="fa fa-angle-right"></i></a>';
-                
-                $html .= '<div class="podify-episode-actions">';
-                if ($audio && $sticky_enabled) {
-                    $html .= '<button class="podify-play-action-btn" aria-label="Play"><svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>';
-                }
-                if ($duration) {
-                    $html .= '<span class="podify-episode-duration">'.$duration.'</span>';
+                // Media Area
+                $html .= '<div class="podify-episode-media">';
+                if ($img) {
+                    $html .= '<img src="'.$img.'" alt="'.$title.'" loading="lazy">';
+                } else {
+                    $html .= '<div class="podify-episode-placeholder"></div>';
                 }
                 $html .= '</div>';
                 
-                if ($meta_line) {
-                    $html .= '<div class="podify-episode-meta">'.$meta_line.'</div>';
+                // Body Area
+                $html .= '<div class="podify-episode-body">';
+                
+                // Categories Area
+                $cats_html = '';
+                if ($show_category_badge) {
+                    $cats_html .= '<div class="podify-episode-categories">';
+                    if ($ep_cats) {
+                        foreach ($ep_cats as $ecat) {
+                            $cats_html .= '<span class="podify-category-pill">'.esc_html($ecat['name']).'</span>';
+                        }
+                    } else {
+                        $cats_html .= '<span class="podify-category-pill">Uncategorized</span>';
+                    }
+                    $cats_html .= '</div>';
                 }
+
+                // Title (Linked in both layouts)
+                $html .= '<div class="podify-episode-top">';
+                if ($is_modern) {
+                    $html .= $cats_html;
+                }
+                $html .= '<h3 class="podify-episode-title"><a href="'.esc_url($permalink).'" class="podify-episode-link">'.$title.'</a></h3>';
+                $html .= '</div>';
+                
+                if (!$is_modern) {
+                    $html .= $cats_html;
+                }
+                
+                // Description
+                if ($desc) {
+                    $html .= '<div class="podify-episode-desc podify-clamp-2">'.$desc.'</div>';
+                }
+                
+                if ($is_modern) {
+                    // Modern Layout Structure
+                    if ($meta_line) {
+                        $html .= '<div class="podify-episode-meta">'.$meta_line.'</div>';
+                    }
+                    
+                    $html .= '<div class="podify-episode-actions">';
+                    $html .= '<a class="podify-read-more" href="'.esc_url($permalink).'">'.esc_html($read_more_text).' <i class="fa fa-angle-right"></i></a>';
+                    
+                    if ($audio && $sticky_enabled) {
+                        $html .= '<button class="podify-play-action-btn" aria-label="Play"><svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>';
+                    }
+                    if ($duration && $sticky_enabled) {
+                        $html .= '<span class="podify-episode-duration">'.$duration.'</span>';
+                    }
+                    $html .= '</div>'; // End Actions
+                    
+                } else {
+                    // Classic Layout Structure
+                    $html .= '<a class="podify-read-more" href="'.esc_url($permalink).'">'.esc_html($read_more_text).' <i class="fa fa-angle-right"></i></a>';
+                    
+                    $html .= '<div class="podify-episode-actions">';
+                    if ($audio && $sticky_enabled) {
+                        $html .= '<button class="podify-play-action-btn" aria-label="Play"><svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>';
+                    }
+                    if ($duration) {
+                        $html .= '<span class="podify-episode-duration">'.$duration.'</span>';
+                    }
+                    $html .= '</div>';
+                    
+                    if ($meta_line) {
+                        $html .= '<div class="podify-episode-meta">'.$meta_line.'</div>';
+                    }
+                }
+                
+                $html .= '</div>'; // End Body
             }
-            
-            $html .= '</div>'; // End Body
+
             $html .= '</div>'; // End Card
         }
         
         $html .= '</div>'; // End Grid
         
         $episodes_url = esc_url_raw(rest_url('podify/v1/episodes'));
-        $total_count = \PodifyPodcast\Core\Database::count_episodes($feed_id ?: null, $category_id ?: null);
+        if ($uncategorized) {
+            $total_count = \PodifyPodcast\Core\Database::count_episodes_advanced([
+                'feed_id' => $feed_id ?: null,
+                'uncategorized' => true,
+            ]);
+        } else {
+            $total_count = \PodifyPodcast\Core\Database::count_episodes($feed_id ?: null, $category_id ?: null);
+        }
         $remaining = max(0, intval($total_count) - count($episodes));
         
         if ($remaining > 0) {
             $wrap_classes = "podify-load-more-wrap";
             if ($category_id) {
                 $wrap_classes .= " podify-cat-{$category_id}";
+            }
+            if ($uncategorized) {
+                $wrap_classes .= " podify-uncategorized";
             }
             $html .= '<div class="'.$wrap_classes.'" style="text-align:center;margin-top:24px;"><button class="podify-load-more" data-target="'.$container_id.'">'.esc_html($load_more_text).'</button></div>';
         }
@@ -801,11 +1087,12 @@ class FrontendInit {
         $html .= 'var STICKY_ENABLED='.wp_json_encode($sticky_enabled).';';
         $html .= 'var READ_MORE_TEXT='.wp_json_encode($read_more_text).';';
         $html .= 'var LOAD_MORE_TEXT='.wp_json_encode($load_more_text).';';
+        $html .= 'var SHOW_CATS='.wp_json_encode($show_category_badge).';';
         $html .= 'var BASE_URL='.wp_json_encode( trailingslashit(home_url()) ).';';
         $html .= 'function parseJSONSafe(r){return r.text().then(function(t){ if(!t||t.trim().charAt(0)==="<"){console.warn("Podify: Received HTML/Invalid JSON", t.substring(0,100));return null;}try{return JSON.parse(t);}catch(_e){console.error("Podify JSON Parse Error:", _e); return null;}});}';
         
         // Helper: Ensure aspect ratio
-        $html .= 'function setCardMediaAspect(root){var imgs=(root?root.querySelectorAll(".podify-episode-media img"):document.querySelectorAll(".podify-episode-media img"));imgs.forEach(function(img){function apply(){var w=img.naturalWidth||0,h=img.naturalHeight||0;if(w>0&&h>0){var p=img.parentElement;if(p){img.style.width="100%";img.style.height="100%";img.style.objectFit="cover";}}}if(img.complete){apply();}else{img.addEventListener("load",apply,{once:true});}});}setCardMediaAspect();';
+        $html .= 'function setCardMediaAspect(root){var imgs=(root?root.querySelectorAll(".podify-episode-media img"):document.querySelectorAll(".podify-episode-media img"));imgs.forEach(function(img){function apply(){var w=img.naturalWidth||0,h=img.naturalHeight||0;if(w>0&&h>0){var p=img.parentElement;if(p){img.style.width="100%";img.style.height="100%";var isListThumb=!!(img.closest&&img.closest(".podify-list-thumb"));img.style.objectFit=isListThumb?"contain":"cover";}}}if(img.complete){apply();}else{img.addEventListener("load",apply,{once:true});}});}setCardMediaAspect();';
         
         // Helper: Ensure Layout Classes and Links (Fixes any JS-rendered inconsistencies)
         $html .= 'function ensureLayoutAndLinks(root){';
@@ -813,11 +1100,14 @@ class FrontendInit {
         $html .= '  grids.forEach(function(g){';
         $html .= '    var lay = g.getAttribute("data-layout") || LAYOUT || "classic";';
         $html .= '    var isModern = (lay === "modern");';
+        $html .= '    var isList = (lay === "list");';
         $html .= '    g.querySelectorAll(".podify-episode-card").forEach(function(card){';
-        $html .= '      if(isModern && !card.classList.contains("podify-modern")){ card.classList.add("podify-modern"); card.classList.remove("podify-row"); }';
-        $html .= '      else if(!isModern && !card.classList.contains("podify-row")){ card.classList.add("podify-row"); card.classList.remove("podify-modern"); }';
+        $html .= '      if(isModern && !card.classList.contains("podify-modern")){ card.classList.add("podify-modern"); card.classList.remove("podify-row"); card.classList.remove("podify-list-layout-card"); }';
+        $html .= '      else if(isList && !card.classList.contains("podify-list-layout-card")){ card.classList.add("podify-list-layout-card"); card.classList.remove("podify-row"); card.classList.remove("podify-modern"); }';
+        $html .= '      else if(!isModern && !isList && !card.classList.contains("podify-row")){ card.classList.add("podify-row"); card.classList.remove("podify-modern"); card.classList.remove("podify-list-layout-card"); }';
         $html .= '      var link = card.querySelector(".podify-read-more");';
         $html .= '      if(!link){';
+        $html .= '        if(isList) return;';
         $html .= '        var t = card.getAttribute("data-title") || "";';
         $html .= '        var slug = t.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");';
         $html .= '        var url = BASE_URL + slug + "/";';
@@ -845,7 +1135,7 @@ class FrontendInit {
         $html .= '  var id=btn.getAttribute("data-target"); var grid=document.getElementById(id); if(!grid)return;';
         $html .= '  var limit=parseInt(grid.getAttribute("data-limit"))||9; var offset=parseInt(grid.getAttribute("data-offset"))||0;';
         $html .= '  var feed=grid.getAttribute("data-feed")||""; var cat=grid.getAttribute("data-category")||"";';
-        $html .= '  var layout=grid.getAttribute("data-layout")||"classic"; var isModern=(layout==="modern");';
+        $html .= '  var layout=grid.getAttribute("data-layout")||"classic"; var isModern=(layout==="modern"); var isList=(layout==="list");';
         $html .= '  btn.disabled=true; var oldT=btn.textContent; btn.textContent="Loading...";';
         $html .= '  var url=EP_URL+"?limit="+limit+"&offset="+offset+(feed?("&feed_id="+encodeURIComponent(feed)):"")+(cat?("&category_id="+encodeURIComponent(cat)):"");';
         $html .= '  fetch(url).then(parseJSONSafe).then(function(d){';
@@ -866,12 +1156,16 @@ class FrontendInit {
         }
         $html .= '      if (ei.categories && ei.categories.length) {';
         $html .= '        ei.categories.forEach(function(cat){ if (!catClasses.includes("podify-cat-" + cat.id)) { catClasses += " podify-cat-" + cat.id; } });';
-        $html .= '      }';
-        $html .= '      var cc=(isModern?"podify-episode-card podify-modern":"podify-episode-card podify-row") + catClasses;';
+        $html .= '      } else { catClasses += " podify-uncat"; }';
+        $html .= '      var cc=((isModern?"podify-episode-card podify-modern":(isList?"podify-episode-card podify-list-layout-card":"podify-episode-card podify-row"))) + catClasses;';
         $html .= '      var da=" data-title=\""+t.replace(/"/g,"&quot;")+"\""; if(au)da+=" data-audio=\""+au+"\""; if(im)da+=" data-image=\""+im+"\""; da+=" data-duration=\""+dur+"\" data-duration-seconds=\""+dSec+"\"";';
-        $html .= '      var cth=""; if(ei.categories && ei.categories.length){';
+        $html .= '      var cth=""; if(SHOW_CATS){';
         $html .= '        cth += "<div class=\"podify-episode-categories\">";';
-        $html .= '        ei.categories.forEach(function(cat){ cth += "<span class=\"podify-category-pill\">"+cat.name+"</span>"; });';
+        $html .= '        if(ei.categories && ei.categories.length){';
+        $html .= '          ei.categories.forEach(function(cat){ cth += "<span class=\"podify-category-pill\">"+cat.name+"</span>"; });';
+        $html .= '        } else {';
+        $html .= '          cth += "<span class=\"podify-category-pill\">Uncategorized</span>";';
+        $html .= '        }';
         $html .= '        cth += "</div>";';
         $html .= '      }';
         $html .= '      h+="<div class=\""+cc+"\""+da+">";';
@@ -884,7 +1178,18 @@ class FrontendInit {
         $html .= '        if(au && STICKY_ENABLED)h+="<button class=\"podify-play-action-btn\" aria-label=\"Play\"><svg viewBox=\"0 0 24 24\" width=\"36\" height=\"36\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg></button>";';
         $html .= '        if(dur && STICKY_ENABLED)h+="<span class=\"podify-episode-duration\">"+dur+"</span>";';
         $html .= '        h+="</div></div>";';
-        $html .= '      }else{';
+        $html .= '      } else if(isList) {';
+        $html .= '        var durLbl=""; if(dSec>0){ if(dSec>=3600){ var hh=Math.floor(dSec/3600); var mm=Math.floor((dSec%3600)/60); durLbl = hh+"h"+(mm>0?(" "+mm+"m"):""); } else { var mn=Math.max(1, Math.round(dSec/60)); durLbl = mn+" min"; } }';
+        $html .= '        h+="<div class=\"podify-episode-media podify-list-thumb\">"+(im?"<img src=\""+im+"\" alt=\""+t.replace(/"/g,"&quot;")+"\" loading=\"lazy\" style=\"width:100%;height:100%;object-fit:contain;\">":"<div class=\"podify-episode-placeholder\"></div>")+"</div>";';
+        $html .= '        h+="<div class=\"podify-episode-body podify-list-content\">";';
+        $html .= '        h+="<div class=\"podify-list-meta-row\">"+cth+(durLbl?"<span class=\"podify-list-duration\">"+durLbl+"</span>":"")+"</div>";';
+        $html .= '        h+="<h3 class=\"podify-episode-title\"><a href=\""+pm+"\" class=\"podify-episode-link\">"+t+"</a></h3>";';
+        $html .= '        if(de)h+="<div class=\"podify-episode-desc podify-list-desc\">"+de+"</div>";';
+        $html .= '        h+="<div class=\"podify-list-bottom-row\">";';
+        $html .= '        if(au && STICKY_ENABLED){ h+="<button class=\"podify-play-action-btn podify-list-play-btn\" aria-label=\"Play Episode\"><span class=\"podify-list-play-icon\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg></span><span class=\"podify-list-play-text\">Play Episode</span></button>"; } else { h+="<a class=\"podify-read-more podify-list-play-btn\" href=\""+pm+"\">"+READ_MORE_TEXT+"</a>"; }';
+        $html .= '        if(dtS)h+="<span class=\"podify-list-date\">"+dtS+"</span>";';
+        $html .= '        h+="</div></div>";';
+        $html .= '      } else {';
         $html .= '        h+="<div class=\"podify-episode-media\">"+(im?"<img src=\""+im+"\" alt=\""+t.replace(/"/g,"&quot;")+"\" loading=\"lazy\" style=\"width:100%;height:100%;object-fit:cover;\">":"<div class=\"podify-episode-placeholder\"></div>")+"</div>";';
         $html .= '        h+="<div class=\"podify-episode-body\"><div class=\"podify-episode-top\"><h3 class=\"podify-episode-title\"><a href=\""+pm+"\" class=\"podify-episode-link\">"+t+"</a></h3></div>"+cth;';
         $html .= '        if(de)h+="<div class=\"podify-episode-desc podify-clamp-2\">"+de+"</div>";';

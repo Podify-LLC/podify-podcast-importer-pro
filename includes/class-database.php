@@ -351,11 +351,27 @@ class Database {
         $ok = $wpdb->insert("{$wpdb->prefix}podify_podcast_categories", ['feed_id' => $feed_id, 'name' => $name, 'slug' => $slug]);
         return $ok ? intval($wpdb->insert_id) : false;
     }
+    public static function clear_episode_categories($episode_id) {
+        global $wpdb;
+        $episode_id = intval($episode_id);
+        if (!$episode_id) return false;
+        self::ensure_installed();
+        $wpdb->delete("{$wpdb->prefix}podify_podcast_episode_categories", ['episode_id' => $episode_id]);
+
+        $post_id = intval($wpdb->get_var($wpdb->prepare("SELECT post_id FROM {$wpdb->prefix}podify_podcast_episodes WHERE id=%d", $episode_id)));
+        if ($post_id > 0) {
+            wp_set_object_terms($post_id, [], 'category', false);
+        }
+
+        return true;
+    }
     public static function assign_episode_category($episode_id, $category_id) {
         global $wpdb;
         $episode_id = intval($episode_id);
         $category_id = intval($category_id);
-        if (!$episode_id || !$category_id) return false;
+        if (!$episode_id) return false;
+        if ($category_id === 0) return self::clear_episode_categories($episode_id);
+        if (!$category_id) return false;
         self::ensure_installed();
        // Remove existing categories for this episode (single category mode)
         $wpdb->delete("{$wpdb->prefix}podify_podcast_episode_categories", ['episode_id' => $episode_id]);

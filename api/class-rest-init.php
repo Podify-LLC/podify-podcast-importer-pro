@@ -25,21 +25,63 @@ class RestInit {
                 return current_user_can('manage_options');
             },
             'callback' => function(\WP_REST_Request $req) {
+                error_log('[Podify API] Sync endpoint called');
                 $feed_id = intval($req->get_param('feed_id'));
+                error_log('[Podify API] Feed ID: ' . $feed_id);
+                
                 if (!$feed_id) {
+                    error_log('[Podify API] Error: Missing feed_id');
                     return ['ok' => false, 'message' => 'Missing feed_id'];
                 }
+
+                $lock_key = 'podify_sync_lock_' . $feed_id;
+                if (get_transient($lock_key)) {
+                    error_log('[Podify API] Clearing existing sync lock (possible stale lock): ' . $lock_key);
+                    delete_transient($lock_key);
+                }
                 
-                // Set initial status immediately so polling sees it
                 set_transient('podify_import_progress_'.$feed_id, [
                     'total' => 0, 'current' => 0, 'percentage' => 0, 'status' => 'Syncing...'
                 ], 3600);
 
-                // Schedule immediate background sync
-                wp_schedule_single_event(time(), \PodifyPodcast\Core\Cron\CronInit::HOOK_FEED, [$feed_id, false]);
-                spawn_cron(); // Try to trigger cron execution immediately
-                
-                return ['ok' => true, 'message' => 'Sync started'];
+                error_log('[Podify API] Calling import_feed synchronously');
+                try {
+                    $result = \PodifyPodcast\Core\Importer::import_feed($feed_id, false);
+                    $ok = is_array($result) && array_key_exists('ok', $result) ? (bool)$result['ok'] : true;
+                    $msg = is_array($result) && !empty($result['message']) ? (string)$result['message'] : ($ok ? 'Sync completed' : 'Sync failed');
+                    error_log('[Podify API] Sync completed. ok=' . ($ok ? 'true' : 'false') . ' message=' . $msg);
+
+                    if (!$ok) {
+                        set_transient('podify_import_progress_'.$feed_id, [
+                            'total' => 0,
+                            'current' => 0,
+                            'percentage' => 100,
+                            'status' => 'Error: ' . $msg
+                        ], 60);
+                    }
+
+                    return ['ok' => $ok, 'message' => $msg, 'results' => $result];
+                } catch (\Exception $e) {
+                    error_log('[Podify API] Sync exception: ' . $e->getMessage());
+                    error_log('[Podify API] Sync trace: ' . $e->getTraceAsString());
+                    set_transient('podify_import_progress_'.$feed_id, [
+                        'total' => 0,
+                        'current' => 0,
+                        'percentage' => 100,
+                        'status' => 'Error: ' . $e->getMessage()
+                    ], 60);
+                    return ['ok' => false, 'message' => 'Sync failed: ' . $e->getMessage()];
+                } catch (\Error $e) {
+                    error_log('[Podify API] Sync error: ' . $e->getMessage());
+                    error_log('[Podify API] Sync trace: ' . $e->getTraceAsString());
+                    set_transient('podify_import_progress_'.$feed_id, [
+                        'total' => 0,
+                        'current' => 0,
+                        'percentage' => 100,
+                        'status' => 'Error: ' . $e->getMessage()
+                    ], 60);
+                    return ['ok' => false, 'message' => 'Sync failed: ' . $e->getMessage()];
+                }
             }
         ]);
         register_rest_route('podify/v1','/resync',[
@@ -48,21 +90,57 @@ class RestInit {
                 return current_user_can('manage_options');
             },
             'callback' => function(\WP_REST_Request $req) {
+                error_log('[Podify API] Resync endpoint called');
                 $feed_id = intval($req->get_param('feed_id'));
+                error_log('[Podify API] Feed ID: ' . $feed_id);
+                
                 if (!$feed_id) {
+                    error_log('[Podify API] Error: Missing feed_id');
                     return ['ok' => false, 'message' => 'Missing feed_id'];
                 }
 
-                // Set initial status immediately
                 set_transient('podify_import_progress_'.$feed_id, [
                     'total' => 0, 'current' => 0, 'percentage' => 0, 'status' => 'Force Syncing...'
                 ], 3600);
 
-                // Schedule background force sync
-                wp_schedule_single_event(time(), \PodifyPodcast\Core\Cron\CronInit::HOOK_FEED, [$feed_id, true]);
-                spawn_cron();
-                
-                return ['ok' => true, 'message' => 'Force sync started'];
+                error_log('[Podify API] Calling import_feed synchronously (force=true)');
+                try {
+                    $result = \PodifyPodcast\Core\Importer::import_feed($feed_id, true);
+                    $ok = is_array($result) && array_key_exists('ok', $result) ? (bool)$result['ok'] : true;
+                    $msg = is_array($result) && !empty($result['message']) ? (string)$result['message'] : ($ok ? 'Force sync completed' : 'Force sync failed');
+                    error_log('[Podify API] Resync completed. ok=' . ($ok ? 'true' : 'false') . ' message=' . $msg);
+
+                    if (!$ok) {
+                        set_transient('podify_import_progress_'.$feed_id, [
+                            'total' => 0,
+                            'current' => 0,
+                            'percentage' => 100,
+                            'status' => 'Error: ' . $msg
+                        ], 60);
+                    }
+
+                    return ['ok' => $ok, 'message' => $msg, 'results' => $result];
+                } catch (\Exception $e) {
+                    error_log('[Podify API] Resync exception: ' . $e->getMessage());
+                    error_log('[Podify API] Resync trace: ' . $e->getTraceAsString());
+                    set_transient('podify_import_progress_'.$feed_id, [
+                        'total' => 0,
+                        'current' => 0,
+                        'percentage' => 100,
+                        'status' => 'Error: ' . $e->getMessage()
+                    ], 60);
+                    return ['ok' => false, 'message' => 'Force sync failed: ' . $e->getMessage()];
+                } catch (\Error $e) {
+                    error_log('[Podify API] Resync error: ' . $e->getMessage());
+                    error_log('[Podify API] Resync trace: ' . $e->getTraceAsString());
+                    set_transient('podify_import_progress_'.$feed_id, [
+                        'total' => 0,
+                        'current' => 0,
+                        'percentage' => 100,
+                        'status' => 'Error: ' . $e->getMessage()
+                    ], 60);
+                    return ['ok' => false, 'message' => 'Force sync failed: ' . $e->getMessage()];
+                }
             }
         ]);
         register_rest_route('podify/v1','/episodes',[
@@ -164,12 +242,25 @@ class RestInit {
                         if (!$permalink) {
                             $permalink = home_url('/'.sanitize_title($check_title).'/');
                         }
+                        $desc_content = '';
+                        if ($pid > 0) {
+                            $post = get_post($pid);
+                            if ($post) {
+                                $desc_content = $post->post_content;
+                            }
+                        }
+                        if (empty($desc_content) && !empty($r['description'])) {
+                            $desc_content = $r['description'];
+                        }
+                        $link_count = \PodifyPodcast\Core\Helpers::count_links_in_content($desc_content);
+                        
                         $items[] = [
                             'id' => intval($r['id']),
                             'post_id' => $pid,
                             'feed_id' => intval($r['feed_id']),
                             'title' => is_string($r['title']) ? $r['title'] : '',
                             'description' => is_string($r['description']) ? $r['description'] : '',
+                            'link_count' => $link_count,
                             'audio_url' => $audio,
                             'image_url' => $image,
                             'duration' => is_string($r['duration']) ? $r['duration'] : '',
@@ -277,8 +368,9 @@ class RestInit {
             'permission_callback' => function() { return current_user_can('manage_options'); },
             'callback' => function(\WP_REST_Request $req) {
                 $episode_id = intval($req->get_param('episode_id'));
-                $category_id = intval($req->get_param('category_id'));
-                if (!$episode_id || !$category_id) return ['ok'=>false,'message'=>'Invalid payload'];
+                $category_raw = $req->get_param('category_id');
+                $category_id = is_numeric($category_raw) ? intval($category_raw) : null;
+                if (!$episode_id || is_null($category_id) || $category_id < 0) return ['ok'=>false,'message'=>'Invalid payload'];
                 $ok = \PodifyPodcast\Core\Database::assign_episode_category($episode_id, $category_id);
                 return ['ok' => (bool)$ok];
             }
@@ -288,8 +380,9 @@ class RestInit {
             'permission_callback' => function() { return current_user_can('manage_options'); },
             'callback' => function(\WP_REST_Request $req) {
                 $episode_ids = $req->get_param('episode_ids');
-                $category_id = intval($req->get_param('category_id'));
-                if (!is_array($episode_ids) || empty($episode_ids) || !$category_id) {
+                $category_raw = $req->get_param('category_id');
+                $category_id = is_numeric($category_raw) ? intval($category_raw) : null;
+                if (!is_array($episode_ids) || empty($episode_ids) || is_null($category_id) || $category_id < 0) {
                     return ['ok'=>false,'message'=>'Invalid payload'];
                 }
                 $count = 0;
@@ -317,6 +410,95 @@ class RestInit {
                 \PodifyPodcast\Core\Cron\CronInit::clear_feed($feed_id);
                 \PodifyPodcast\Core\Cron\CronInit::schedule_feed($feed_id, $interval);
                 return ['ok' => true];
+            }
+        ]);
+        register_rest_route('podify/v1','/backfill',[
+            'methods' => 'POST',
+            'permission_callback' => function(\WP_REST_Request $req) {
+                $feed_id = intval($req->get_param('feed_id'));
+                $tok = (string)$req->get_param('internal_token');
+                if ($feed_id && $tok) {
+                    $expected = get_transient('podify_backfill_token_' . $feed_id);
+                    if (is_string($expected) && $expected !== '' && hash_equals($expected, $tok)) {
+                        return true;
+                    }
+                }
+                return current_user_can('manage_options');
+            },
+            'callback' => function(\WP_REST_Request $req) {
+                error_log('[Podify API] Backfill endpoint called');
+                $feed_id = intval($req->get_param('feed_id'));
+                error_log('[Podify API] Feed ID: ' . $feed_id);
+                
+                if (!$feed_id) {
+                    error_log('[Podify API] Error: Missing feed_id');
+                    return ['ok' => false, 'message' => 'Missing feed_id'];
+                }
+                
+                $force = (bool)$req->get_param('force');
+                $tok = (string)$req->get_param('internal_token');
+                $is_internal = ($tok !== '');
+                if ($is_internal) {
+                    $force = false;
+                }
+                
+                $existing_progress = get_transient('podify_backfill_progress_' . $feed_id);
+                if ($force || !$existing_progress) {
+                    set_transient('podify_backfill_progress_'.$feed_id, [
+                        'total' => 0, 'current' => 0, 'percentage' => 0, 'status' => 'Starting backfill...'
+                    ], 3600);
+                }
+
+                error_log('[Podify API] Calling backfill_feed_links (force=' . ($force ? 'true' : 'false') . ')');
+                try {
+                    $result = \PodifyPodcast\Core\Importer::backfill_feed_links($feed_id, $force, 50);
+                    $ok = is_array($result) && array_key_exists('ok', $result) ? (bool)$result['ok'] : true;
+                    $msg = is_array($result) && !empty($result['message']) ? (string)$result['message'] : ($ok ? 'Backfill completed' : 'Backfill failed');
+                    error_log('[Podify API] Backfill completed. ok=' . ($ok ? 'true' : 'false') . ' message=' . $msg);
+                    error_log('[Podify API] Result: ' . json_encode($result));
+                    if (!$ok) {
+                        set_transient('podify_backfill_progress_'.$feed_id, [
+                            'total' => 0,
+                            'current' => 0,
+                            'percentage' => 100,
+                            'status' => 'Error: ' . $msg
+                        ], 60);
+                    }
+                    return ['ok' => $ok, 'message' => $msg, 'results' => $result];
+                } catch (\Exception $e) {
+                    error_log('[Podify API] Backfill exception: ' . $e->getMessage());
+                    error_log('[Podify API] Backfill trace: ' . $e->getTraceAsString());
+                    set_transient('podify_backfill_progress_'.$feed_id, [
+                        'total' => 0,
+                        'current' => 0,
+                        'percentage' => 100,
+                        'status' => 'Error: ' . $e->getMessage()
+                    ], 60);
+                    return ['ok' => false, 'message' => 'Backfill failed: ' . $e->getMessage()];
+                } catch (\Error $e) {
+                    error_log('[Podify API] Backfill error: ' . $e->getMessage());
+                    error_log('[Podify API] Backfill trace: ' . $e->getTraceAsString());
+                    set_transient('podify_backfill_progress_'.$feed_id, [
+                        'total' => 0,
+                        'current' => 0,
+                        'percentage' => 100,
+                        'status' => 'Error: ' . $e->getMessage()
+                    ], 60);
+                    return ['ok' => false, 'message' => 'Backfill failed: ' . $e->getMessage()];
+                }
+            }
+        ]);
+        register_rest_route('podify/v1','/backfill-progress',[
+            'methods' => 'GET',
+            'permission_callback' => function() { return current_user_can('manage_options'); },
+            'callback' => function(\WP_REST_Request $req) {
+                $feed_id = intval($req->get_param('feed_id'));
+                if (!$feed_id) return ['ok'=>false];
+                $progress = get_transient('podify_backfill_progress_' . $feed_id);
+                if (!$progress) {
+                    return ['ok' => true, 'percentage' => 0, 'status' => 'idle'];
+                }
+                return ['ok' => true, 'percentage' => $progress['percentage'], 'status' => $progress['status'], 'current' => $progress['current'], 'total' => $progress['total']];
             }
         ]);
     }

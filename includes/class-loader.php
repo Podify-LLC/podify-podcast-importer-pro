@@ -15,10 +15,9 @@ class Loader {
         require_once PODIFY_PODCAST_PATH . 'includes/class-database.php';
         require_once PODIFY_PODCAST_PATH . 'includes/class-logger.php';
         require_once PODIFY_PODCAST_PATH . 'includes/class-settings.php';
-        require_once PODIFY_PODCAST_PATH . 'includes/class-importer.php';
         require_once PODIFY_PODCAST_PATH . 'includes/class-helpers.php';
-        require_once PODIFY_PODCAST_PATH . 'includes/class-capabilities.php';
         require_once PODIFY_PODCAST_PATH . 'includes/class-importer.php';
+        require_once PODIFY_PODCAST_PATH . 'includes/class-capabilities.php';
 
         require_once PODIFY_PODCAST_PATH . 'admin/class-admin-init.php';
         require_once PODIFY_PODCAST_PATH . 'frontend/class-frontend-init.php';

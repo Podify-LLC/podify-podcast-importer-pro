@@ -2,6 +2,52 @@
 
 All notable changes to **Podify Podcast Importer Pro** are documented here.
 
+## 1.0.42
+### Title
+- Hyperlink Preservation & Bulk Backfill for Show Notes
+
+### Added
+- **Importer**: HTML sanitization function that preserves hyperlinks (<a> tags with href, target, rel, title attributes)
+- **Importer**: Strict priority order for selecting episode descriptions:
+  1. Use `content:encoded` if it exists and contains ANY <a> tags
+  2. Otherwise use `description` if it contains ANY <a> tags
+  3. Only use `itunes:summary` as a fallback when no richer HTML description exists
+- **Importer**: Simplified link detection to look for ANY `<a` tag (matches ALL links, regardless of type or attributes)
+- **Importer**: Automatically adds rel="noopener noreferrer" to any links with target="_blank" for security
+- **Importer**: Bulk backfill functionality to reprocess all existing episodes and restore links from the original RSS feed
+- **Backfill**: Loads ALL episodes from the database first, then matches to feed items
+- **Backfill**: Uses the EXACT SAME priority order and link detection as the importer
+- **REST API**: New endpoints /backfill and /backfill-progress to trigger and monitor the bulk backfill process
+- **Cron**: New hook and handler for background backfill processing
+- **Logging**: Detailed logging for backfill showing updated, skipped, failed, and unmatched episodes
+
+### Fixed
+- **Show Notes**: Hyperlinks from the podcast feed are no longer stripped during import, and ALL links are preserved (guest websites, books, courses, resources, ad choices, etc.)
+
+## 1.0.41
+### Title
+- List Layout & Per-Feed Enhancements
+
+### Added
+- **Frontend**: New "List Layout" option for [podify_podcast_list] (layout="list").
+- **Frontend**: Updated List Layout styling to match the horizontal image | content structure.
+- **Podcast Feed**: Choose default layout (Classic/Modern/List) before editing per-feed styling.
+- **Frontend**: Apply per-feed default styling when rendering the default feed list.
+- **Dashboard**: "Latest Episodes (By Feed)" card that shows the latest episode for each feed.
+
+### Changed
+- **Podcast Feed**: Replaced "Pending..." with a next sync countdown timer (auto-schedules if missing).
+
+## 1.0.40
+### Title
+- Per-Feed Category Badge Toggle
+
+### Added
+- **Per-Feed**: Toggle to show/hide category badges (pills) on episode cards.
+- **Episodes**: Added an "Uncategorized" option to the category dropdown for easier management.
+- **Shortcodes**: If no category is specified, the feed shortcode shows all episodes (including uncategorized).
+- **Per-Feed**: Added an "Uncategorized Card Style" dropdown to reuse a category style for uncategorized cards.
+
 ## 1.0.39
 ### Title
 - Sync Reliability & Dashboard Enhancements
@@ -27,13 +73,14 @@ All notable changes to **Podify Podcast Importer Pro** are documented here.
 - **Sync**: Implemented background processing for manual triggers—syncing now starts **immediately** upon clicking but runs via WP-Cron to completely eliminate 504 Gateway Timeout errors.
 - **Sync**: Re-engineered the "Force" sync logic to perform a full background re-import, ensuring all episodes and images are refreshed even on slow servers.
 - **Sync**: Improved the progress bar to be "Self-Healing"—it now tracks background tasks until completion, even if the initial browser request is interrupted.
+- **Dashboard**: Fixed alignment issues in the "Global Styling" settings card by standardizing field layouts.
 - **Sync**: Resolved an issue where some episodes were missing their connected WordPress posts by implementing a self-healing recreation logic.
 - **Sync**: Fixed real-time sync timer layout and responsiveness in the admin table.
-- **Dashboard**: Redesigned the progress bar into a single unit with centered status text and high-contrast dynamic coloring.
+- **Dashboard**: Redesigned the progress bar into a single unit with centered status text, high-contrast dynamic coloring, and per-item real-time updates for a smoother sync experience.
 - **Dashboard**: Added real-time status text to the progress bar (Percentage, Phase, and Item count).
-- **Dashboard**: Fixed alignment issues in the "Global Styling" settings card by standardizing field layouts.
 - **Maintenance**: Fixed a PHP syntax error in the Importer class.
 - **Maintenance**: Added detailed debug logging for image sideloading, database operations, and post creation failures.
+- **Maintenance**: Improved finalization logic for the synchronization progress bar to ensure it correctly reaches 100%.
 
 ## 1.0.38
 ### Title
@@ -86,138 +133,3 @@ All notable changes to **Podify Podcast Importer Pro** are documented here.
 ### Changed
 - **Frontend**: Updated shortcode rendering to prioritize feed-specific customization with a fallback to global settings.
 - **Admin**: Modernized the feed settings layout with a toggleable customization form for better organization.
-
-## 1.0.30
-### Title
-- AJAX Updater & Hero Banner Refinement
-
-### Added
-- **Updater**: Implemented AJAX-based partial refresh for the "Check Now" button to avoid full page reloads.
-- **Updater**: Updated WordPress core updater to use `logo.png` for plugin icons.
-
-### Changed
-- **UI**: Removed the logo from the Dashboard Hero banner to reduce redundancy.
-- **UI**: Disabled the hover rotation animation on the "Check Now" button; animation now only triggers during active loading.
-- **UI**: Adjusted the Dashboard Hero banner with a centered layout and optimized padding.
-- **UI**: Relocated the update success indicator to a more logical position below the version status.
-- **UI**: Improved badge alignment within the hero heading for better responsiveness.
-
-## 1.0.29
-### Title
-- Logo Integration, Mobile Responsiveness & Pro Branding
-
-### Added
-- **UI**: Integrated `logo_cropped.png` into the admin sidebar and `logo.png` into the dashboard hero banner.
-- **UI**: Added "PRO" badges beside the version number in the Dashboard and Sidebar for premium branding.
-- **UI**: Implemented full mobile responsiveness for the admin dashboard, including a scrollable sidebar menu and stacked layouts for smaller screens.
-- **UI**: Added a smooth rotation animation to the "Check Now" button icon in the Dashboard.
-- **Updater**: Integrated plugin icons into the WordPress update core for a more professional update experience.
-
-### Changed
-- **UX**: Moved the "Updater checked successfully" notice from the top banner directly into the Updater Status widget for a cleaner interface.
-- **UX**: Added a "Checked!" confirmation badge next to the "Check Now" button after a manual update check.
-
-### Fixed
-- **UI**: Refined sidebar layout and hero banner alignment for better responsiveness across screen sizes.
-- **UI**: Fixed filter layout on mobile devices to prevent horizontal overflow.
-
-## 1.0.27
-### Title
-- UI Layout & Filter Alignment Fixes
-
-### Fixed
-- **UI**: Corrected Episodes page filter layout to a single row with improved vertical alignment.
-- **Maintenance**: Updated deprecated `WP_User_Query` arguments for WordPress 5.9+ compatibility.
-- **Updater**: Fixed repository URL mismatch to ensure correct updates for the Pro version.
-
-## 1.0.26
-### Title
-- Updater & UI Refinements
-
-### Improved
-- **UI**: Enhanced text readability for updater status messages and flash notices.
-- **Updater**: Improved robustness of plugin update extraction and folder handling to prevent "No valid plugins found" errors.
-
-## 1.0.25
-### Title
-- Updater Fixes & Cleanup
-
-### Fixed
-- **Updater**: Resolved "Failed to download package" error by implementing proper authentication headers for private repository assets.
-- **Cleanup**: Removed residual debug logging for cleaner production performance.
-
-## 1.0.24
-### Title
-- Modern UI Updates & Enhanced Updater Control
-
-### Added
-- **Updater**: Added a "Check Now" button to the Dashboard Updater Status widget for manual update checks.
-
-### Changed
-- **UI**: Completely modernized the "Schedules" table layout with card styling, status badges, and better alignment.
-- **Admin**: Restored and improved the Updater Status widget in the Dashboard for better visibility of version status.
-
-## 1.0.23
-### Title
-- UI Streamlining, Cleanup & Standardization
-
-### Changed
-- **Maintenance**: Renamed `changelogs.md` to `changelog.md` to follow standard conventions.
-- **Admin**: Updated dashboard to read from the new changelog filename.
-- **Admin**: Removed the "Podify Updater" settings page. Token configuration is now handled exclusively via `wp-config.php` for better security and cleaner UI. The Updater Status widget remains in the Dashboard.
-
-## 1.0.22
-
-### Title
-- Version Bump and Security Improvements
-
-### Changed
-- **Security**: Switched to `PODIFY_GITHUB_TOKEN` constant for safer GitHub authentication.
-- **Updater**: Added detailed debug logging for token verification.
-
-## 1.0.21
-
-### Title
-- Font Updates, Updater Status, and Code Cleanup
-
-### Added
-- **Updater Status**: Added visual indicator in Admin Dashboard (General tab) to show GitHub updater connection status and last check time.
-
-### Changed
-- **Typography**: Updated the episode title font in the podcast player to "Very Vogue" for a more stylish appearance.
-- **Code Cleanup**: Removed residual debug logs and `console.log` statements for cleaner production performance.
-
-## 1.0.20
-
-### Title
-- Volume Controls, Modern Admin Dashboard, Menu Positioning, and Player Fixes
-
-### Added
-- **Volume Control**: Added volume slider and mute toggle to both Single Player and Sticky Player.
-- **Modern Admin Dashboard**: Completely redesigned admin interface with sidebar navigation, Welcome page, and grid-based actions.
-- **Auto-Updater Configuration**: Hardcoded GitHub Personal Access Token for seamless automatic updates without manual configuration.
-
-### Fixed
-- **Audio Playback**: Resolved "Missing audio or play button" error by improving player initialization and fallback detection.
-- **Player Layout**: Fixed issue where audio element was rendered outside the player container.
-- **Channel Title**: Forced channel title display to "The Language of Love by Dr. Laura Berman" for specific feed slugs.
-- **Duplicate Handlers**: Fixed conflict where duplicate play button listeners prevented audio playback.
-
-### Changed
-- **Admin Menu**: Moved "Podcast Importer" menu item up (below Media) for better accessibility.
-- **Logs**: Removed excessive non-error `console.log` debugging messages.
-- **Sticky Player**: Optimized state management for smoother play/pause transitions.
-
-## 1.0.17
-
-### Title
-- Debugging tools, category sync fixes, and layout improvements
-
-### Added
-- **Add debug `console.log` messages to List, Sticky, and Single Player play buttons for easier verification.**
-
-### Fixed
-- **Fix "Uncategorized" category appearing in Single Player frontend.**
-- **Fix Single Player layout issues (SVG progress bar overlap and time display wrapping).**
-- **Fix database sync to ensure manually assigned categories propagate to WordPress Post terms.**
-- **Fix Importer resync to preserve manual categories and correctly update audio URLs.**

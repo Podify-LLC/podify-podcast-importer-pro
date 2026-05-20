@@ -4,9 +4,11 @@ namespace PodifyPodcast\Core\Cron;
 class CronInit {
     const HOOK = 'podify_podcast_sync';
     const HOOK_FEED = 'podify_podcast_sync_feed';
+    const HOOK_BACKFILL = 'podify_podcast_backfill';
     public static function register() {
         add_action(self::HOOK, [self::class,'run']);
         add_action(self::HOOK_FEED, [self::class,'run_feed'], 10, 2);
+        add_action(self::HOOK_BACKFILL, [self::class,'run_backfill'], 10, 1);
         add_filter('cron_schedules', [self::class,'schedules']);
     }
     public static function schedule() {
@@ -69,5 +71,8 @@ class CronInit {
     }
     public static function run_feed($feed_id, $force = false) {
         \PodifyPodcast\Core\Importer::import_feed($feed_id, $force);
+    }
+    public static function run_backfill($feed_id) {
+        \PodifyPodcast\Core\Importer::backfill_feed_links($feed_id);
     }
 }

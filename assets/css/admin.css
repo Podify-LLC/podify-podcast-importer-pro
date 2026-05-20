@@ -20,12 +20,17 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--podify-bg);
     min-height: calc(100vh - 32px);
+    overflow-x: hidden;
+    width: calc(100% + 20px);
+    box-sizing: border-box;
 }
 
 /* Layout Container */
 .podify-admin-layout {
     display: flex;
     min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden;
 }
 
 /* Sidebar */
@@ -140,6 +145,12 @@
     max-width: none;
     margin: 0;
     box-sizing: border-box;
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.podify-admin-wrap-main * {
+    box-sizing: border-box;
 }
 
 /* --- Layout Utilities --- */
@@ -177,6 +188,129 @@
     font-size: 22px;
     width: 22px;
     height: 22px;
+}
+
+.podify-latest-episodes-empty {
+    margin: 0;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.podify-latest-episodes-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.podify-latest-episodes-card {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.podify-latest-feed-item {
+    padding: 14px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: linear-gradient(to bottom, #ffffff, #f8fafc);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.podify-latest-feed-item:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 6px 14px -10px rgba(15, 23, 42, 0.25);
+    transform: translateY(-1px);
+}
+
+.podify-latest-feed-row {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 12px;
+    align-items: center;
+}
+
+.podify-latest-episode-media {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+.podify-latest-episode-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.podify-latest-episode-media .dashicons {
+    color: #2563eb;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.podify-latest-episode-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.podify-latest-feed-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.podify-latest-feed-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.podify-latest-feed-date {
+    font-size: 12px;
+    font-weight: 500;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.podify-latest-episode-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #0f172a;
+    text-decoration: none;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.podify-latest-episode-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.podify-latest-episode-empty {
+    font-size: 13px;
+    font-weight: 500;
+    color: #94a3b8;
 }
 
 .podify-updater-card {
@@ -410,7 +544,8 @@
     background: #fff;
     border-radius: 16px;
     border: 1px solid #e2e8f0;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
@@ -567,6 +702,197 @@
     border-collapse: separate;
     border-spacing: 0;
     margin-top: 10px;
+    table-layout: fixed;
+}
+
+.podify-scheduled-table {
+    table-layout: fixed;
+}
+
+.podify-scheduled-table th,
+.podify-scheduled-table td {
+    padding: 12px 14px;
+}
+
+.podify-scheduled-table thead th:nth-child(1),
+.podify-scheduled-table tbody td:nth-child(1) {
+    width: 72px !important;
+    text-align: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.podify-scheduled-table thead th:nth-child(3),
+.podify-scheduled-table tbody td:nth-child(3) {
+    width: 120px !important;
+    text-align: center;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.podify-scheduled-table tbody td:nth-child(1) .podify-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 44px;
+}
+
+.podify-scheduled-table thead th:nth-child(4),
+.podify-scheduled-table tbody td:nth-child(4) {
+    width: clamp(420px, 45vw, 640px) !important;
+    padding-left: 24px;
+}
+
+.podify-scheduled-table th:first-child,
+.podify-scheduled-table td:first-child {
+    padding-left: 14px;
+    padding-right: 14px;
+}
+
+.podify-actions-inline {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.podify-action-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.podify-action-menu-toggle .dashicons {
+    margin-right: 0;
+}
+
+.podify-action-menu-pop {
+    position: fixed;
+    min-width: 220px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 18px 35px rgba(15, 23, 42, 0.14);
+    padding: 10px;
+    z-index: 9999;
+}
+
+.podify-action-menu-pop .podify-btn-modern {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+.podify-action-menu-pop .podify-btn-modern + .podify-btn-modern {
+    margin-top: 8px;
+}
+
+.podify-actions-inline form {
+    margin: 0;
+}
+
+.podify-btn-label {
+    display: inline;
+}
+
+.podify-url-text {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.podify-url-text {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+@media (max-width: 1280px) {
+    :root {
+        --podify-sidebar-width: 230px;
+    }
+    .podify-content {
+        padding: 28px;
+    }
+    .podify-btn-modern {
+        padding: 10px 16px;
+        gap: 8px;
+        font-size: 13px;
+    }
+    .podify-btn-modern .dashicons {
+        font-size: 16px;
+        width: 16px;
+        height: 16px;
+    }
+    .podify-scheduled-table thead th:nth-child(4),
+    .podify-scheduled-table tbody td:nth-child(4) {
+        width: clamp(280px, 34vw, 460px) !important;
+    }
+}
+
+@media (max-width: 1100px) {
+    :root {
+        --podify-sidebar-width: 210px;
+    }
+    .podify-content {
+        padding: 22px;
+    }
+    .podify-scheduled-table th,
+    .podify-scheduled-table td {
+        padding: 10px 12px;
+    }
+    .podify-scheduled-table thead th:nth-child(4),
+    .podify-scheduled-table tbody td:nth-child(4) {
+        width: clamp(240px, 32vw, 400px) !important;
+    }
+    .podify-actions-inline {
+        gap: 10px;
+    }
+    .podify-btn-label {
+        display: none;
+    }
+    .podify-btn-modern {
+        padding: 10px 12px;
+        min-width: 40px;
+    }
+}
+
+@media (max-width: 960px) {
+    .podify-content {
+        padding: 18px;
+    }
+    .podify-scheduled-table thead th:nth-child(4),
+    .podify-scheduled-table tbody td:nth-child(4) {
+        width: 320px !important;
+    }
+    .podify-actions-inline {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 782px) {
+    :root {
+        --podify-sidebar-width: 200px;
+    }
+    .podify-content {
+        padding: 14px;
+    }
+    .podify-table-card {
+        border-radius: 14px;
+    }
+    .podify-scheduled-table thead th:nth-child(4),
+    .podify-scheduled-table tbody td:nth-child(4) {
+        width: 280px !important;
+    }
+    .podify-btn-modern {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
 }
 
 .podify-modern-table th {
@@ -578,6 +904,9 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     border-bottom: 1px solid #e2e8f0;
+    overflow-wrap: normal;
+    word-break: normal;
+    white-space: nowrap;
 }
 
 .podify-modern-table td {
@@ -585,6 +914,8 @@
     border-bottom: 1px solid #f1f5f9;
     color: #334155;
     vertical-align: middle;
+    overflow-wrap: break-word;
+    word-break: normal;
 }
 
 .podify-modern-table tr:last-child td {
@@ -772,6 +1103,26 @@
     margin-bottom: 30px;
 }
 
+@media (min-width: 1400px) {
+    .podify-dashboard-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .podify-latest-episodes-card {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .podify-plugin-details-card {
+        grid-column: 4;
+        grid-row: 1;
+    }
+
+    .podify-latest-episodes-card .podify-latest-episodes-list {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* --- Feature List --- */
 .podify-feature-list {
     list-style: none;
@@ -901,7 +1252,8 @@
     border: 1px solid var(--podify-border);
     box-shadow: var(--podify-shadow);
     border-radius: 8px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     background: #fff;
     margin-top: 20px;
 }
@@ -1065,6 +1417,104 @@
 }
 
 /* --- Episodes Filters --- */
+.podify-episodes-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px;
+    background: #fff;
+    padding: 16px 24px;
+    border: 1px solid var(--podify-border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    box-shadow: var(--podify-shadow);
+    overflow-x: hidden;
+}
+
+.podify-episodes-toolbar .podify-bulk-group {
+    flex: 0 0 auto;
+}
+
+.podify-episodes-toolbar .podify-limit-group {
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+.podify-episodes-toolbar .podify-bulk-group select {
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 14px;
+    background-color: #f8fafc;
+}
+
+.podify-episodes-toolbar #podify-bulk-apply-top {
+    height: 42px;
+    padding: 0 14px;
+    border-radius: 8px;
+}
+
+.podify-episodes-toolbar .podify-filters-grid {
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    margin: 0;
+    box-shadow: none;
+    overflow-x: hidden !important;
+    overflow-y: visible;
+    gap: 10px;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-field {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-field:first-child {
+    flex: 1.4 1 0;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-checkbox-field {
+    height: 42px;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-checkbox-field label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    margin-bottom: 0;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-checkbox-field input[type=checkbox] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-button-modern {
+    height: 44px;
+    white-space: nowrap;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-filter-item input,
+.podify-episodes-toolbar .podify-filters-grid .podify-filter-item select {
+    padding: 0 10px;
+    font-size: 13px;
+}
+
+.podify-episodes-toolbar .podify-filters-grid .podify-checkbox-field label {
+    font-size: 12px;
+    letter-spacing: 0.03em;
+}
+
 .podify-admin-header {
     display: flex;
     justify-content: space-between;
@@ -1115,7 +1565,7 @@
 
 .podify-filters-grid {
     display: flex;
-    flex-wrap: nowrap; /* Force single row as requested */
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: 16px;
     background: #fff;
@@ -1124,7 +1574,7 @@
     border-radius: 8px;
     margin-bottom: 24px;
     box-shadow: var(--podify-shadow);
-    overflow-x: auto; /* Allow horizontal scroll if too narrow */
+    overflow-x: visible;
 }
 
 .podify-filters-grid .podify-field {
@@ -1183,13 +1633,24 @@ input[type=radio] {
 .podify-pagination {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 12px;
     margin-top: 24px;
     padding: 16px;
     background: #fff;
     border-radius: 8px;
     border: 1px solid var(--podify-border);
+}
+
+.podify-pagination-left,
+.podify-pagination-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.podify-pagination-left .podify-limit-field label {
+    margin: 0;
 }
 
 #podify-admin-page {

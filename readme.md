@@ -2,7 +2,7 @@
 # Podify Podcast Importer Pro
 
 - Contributors: podify
-- Version: 1.0.39
+- Version: 1.0.43
 - Requires at least: 6.0
 - Tested up to: 6.7
 
@@ -18,7 +18,10 @@ Optional attributes:
 - `limit`: number of episodes to show (default 9)
 - `cols`: number of columns (1–4, default 3)
 - `feed_id`: specific feed to render
-- `category_id`: filter episodes by a category belonging to the feed
+- `category_id`: filter episodes by a Podify category ID
+- `category`: filter episodes by category slug or name (alternative to `category_id`)
+- `layout`: `classic` or `modern` (default `classic`)
+- `layout`: `classic`, `modern`, or `list` (default `classic`)
 
 Examples:
 
@@ -26,7 +29,23 @@ Examples:
 [podify_podcast_list]
 [podify_podcast_list feed_id="1"]
 [podify_podcast_list feed_id="1" category_id="10"]
+[podify_podcast_list feed_id="1" category="technology"]
+[podify_podcast_list feed_id="1" category="uncategorized"]
+[podify_podcast_list feed_id="1" layout="modern"]
+[podify_podcast_list feed_id="1" layout="list"]
 [podify_podcast_list limit="12" cols="4"]
+```
+
+`[podify_single_player]` — Renders the audio player for a single episode post (only appears if the post has audio meta).
+
+Optional attributes:
+- `post_id`: render the player for a specific post ID
+
+Examples:
+
+```text
+[podify_single_player]
+[podify_single_player post_id="123"]
 ```
 
 ## Settings

@@ -32,6 +32,91 @@ class Importer {
         return $u;
     }
 
+    private static function remove_hook_callbacks($hook, $predicate) {
+        $removed = [];
+        global $wp_filter;
+        if (!isset($wp_filter[$hook]) || !is_object($wp_filter[$hook]) || !isset($wp_filter[$hook]->callbacks) || !is_array($wp_filter[$hook]->callbacks)) {
+            return $removed;
+        }
+        foreach ($wp_filter[$hook]->callbacks as $priority => $callbacks) {
+            if (!is_array($callbacks)) continue;
+            foreach ($callbacks as $cb) {
+                if (!is_array($cb) || !isset($cb['function'])) continue;
+                $fn = $cb['function'];
+                $accepted_args = isset($cb['accepted_args']) ? intval($cb['accepted_args']) : 1;
+                if (is_callable($predicate) && $predicate($fn)) {
+                    remove_action($hook, $fn, intval($priority));
+                    $removed[] = [
+                        'hook' => $hook,
+                        'priority' => intval($priority),
+                        'function' => $fn,
+                        'accepted_args' => $accepted_args,
+                    ];
+                }
+            }
+        }
+        return $removed;
+    }
+
+    private static function restore_hook_callbacks($removed) {
+        if (empty($removed) || !is_array($removed)) return;
+        foreach ($removed as $r) {
+            if (!is_array($r) || empty($r['hook']) || !isset($r['function'])) continue;
+            $hook = (string)$r['hook'];
+            $priority = isset($r['priority']) ? intval($r['priority']) : 10;
+            $accepted_args = isset($r['accepted_args']) ? intval($r['accepted_args']) : 1;
+            add_action($hook, $r['function'], $priority, $accepted_args);
+        }
+    }
+
+    private static function disable_nginx_helper_transition_hook() {
+        return self::remove_hook_callbacks('transition_post_status', function($fn) {
+            return is_array($fn)
+                && isset($fn[0], $fn[1])
+                && is_object($fn[0])
+                && $fn[1] === 'set_future_post_option_on_future_status'
+                && (is_a($fn[0], '\Nginx_Helper_Admin') || is_a($fn[0], 'Nginx_Helper_Admin'));
+        });
+    }
+
+    private static function get_backfill_token($feed_id, $reset = false) {
+        $feed_id = intval($feed_id);
+        $key = 'podify_backfill_token_' . $feed_id;
+        if ($reset) {
+            delete_transient($key);
+        }
+        $tok = get_transient($key);
+        if (!is_string($tok) || $tok === '') {
+            $tok = function_exists('wp_generate_password') ? wp_generate_password(32, false, false) : bin2hex(random_bytes(16));
+            set_transient($key, $tok, 12 * 3600);
+        }
+        return $tok;
+    }
+
+    private static function spawn_backfill_continue($feed_id, $token) {
+        $feed_id = intval($feed_id);
+        if (!$feed_id || !is_string($token) || $token === '') {
+            return;
+        }
+        if (!function_exists('rest_url') || !function_exists('wp_remote_post') || !function_exists('wp_json_encode')) {
+            return;
+        }
+        $url = rest_url('podify/v1/backfill');
+        $payload = [
+            'feed_id' => $feed_id,
+            'internal_token' => $token,
+        ];
+        $resp = wp_remote_post($url, [
+            'timeout' => 0.01,
+            'blocking' => false,
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => wp_json_encode($payload),
+        ]);
+        if (is_wp_error($resp)) {
+            Logger::error('Backfill: Failed to spawn continuation request: ' . $resp->get_error_message());
+        }
+    }
+
     private static function set_featured_image($post_id, $image_url) {
         if (!$post_id || !$image_url) return;
         
@@ -80,14 +165,33 @@ class Importer {
     }
 
     public static function import_feed($feed_id, $force = false) {
+        error_log('[Podify Import] Starting import_feed function');
         $lock_key = 'podify_sync_lock_' . $feed_id;
+        
+        if ($force) {
+            error_log('[Podify Import] Force mode - clearing existing lock');
+            delete_transient($lock_key);
+        }
+        
         if (get_transient($lock_key)) {
+            error_log('[Podify Import] Sync already in progress for feed ' . $feed_id);
             Logger::log("Sync already in progress for feed $feed_id. Skipping.");
+            $fid = intval($feed_id);
+            if ($fid) {
+                set_transient('podify_import_progress_'.$fid, [
+                    'total' => 0,
+                    'current' => 0,
+                    'percentage' => 100,
+                    'status' => 'Error: Sync already in progress'
+                ], 60);
+            }
             return ['ok' => false, 'message' => 'Sync already in progress'];
         }
-        set_transient($lock_key, true, 1800); // 30 min lock
-
-        Logger::log("Starting import for feed $feed_id (Force: " . ($force?'Yes':'No') . ")");
+        set_transient($lock_key, true, 300); // 5 min lock
+        
+        try {
+            error_log('[Podify Import] Starting import for feed ' . $feed_id . ' (Force: ' . ($force?'Yes':'No') . ')');
+            Logger::log("Starting import for feed $feed_id (Force: " . ($force?'Yes':'No') . ")");
         if (function_exists('set_time_limit')) {
             @set_time_limit(0);
         }
@@ -197,18 +301,48 @@ class Importer {
             $title = trim((string)$item->title);
             $desc = '';
             $itunes = $item->children('itunes', true);
-            if ($itunes && isset($itunes->summary)) {
-                $desc = trim((string)$itunes->summary);
-            }
-            if (!$desc) {
-                $content = $item->children('content', true);
-                if ($content && isset($content->encoded)) {
-                    $desc = trim((string)$content->encoded);
+            
+            Logger::log("Importer: Processing episode: " . $title);
+            
+            $content = $item->children('content', true);
+            if ($content && isset($content->encoded)) {
+                $temp_desc = trim((string)$content->encoded);
+                if (!empty($temp_desc)) {
+                    $desc = $temp_desc;
+                    Logger::log("Importer: Using content:encoded for: " . $title);
                 }
             }
-            if (!$desc) {
-                $desc = trim((string)$item->description);
+            
+            if (empty($desc)) {
+                $temp_desc = trim((string)$item->description);
+                if (!empty($temp_desc)) {
+                    $desc = $temp_desc;
+                    Logger::log("Importer: Using description for: " . $title);
+                }
             }
+            
+            if (empty($desc)) {
+                if ($itunes && isset($itunes->summary)) {
+                    $desc = trim((string)$itunes->summary);
+                    Logger::log("Importer: Using itunes:summary for: " . $title);
+                }
+            }
+            
+            if (empty($desc) && $content && isset($content->encoded)) {
+                $desc = trim((string)$content->encoded);
+                Logger::log("Importer: Fallback to content:encoded (empty) for: " . $title);
+            }
+            
+            if (empty($desc)) {
+                $desc = trim((string)$item->description);
+                Logger::log("Importer: Fallback to description (empty) for: " . $title);
+            }
+            
+            $link_count = Helpers::count_links_in_content($desc);
+            Logger::log("Importer: Final description for " . $title . " (length: " . strlen($desc) . ", links: " . $link_count . ")");
+            $desc = Helpers::sanitize_feed_content($desc);
+            $sanitized_link_count = Helpers::count_links_in_content($desc);
+            Logger::log("Importer: Sanitized description for " . $title . " (length: " . strlen($desc) . ", links: " . $sanitized_link_count . ")");
             $pubRaw = (string)$item->pubDate;
             $published = $pubRaw ? date('Y-m-d H:i:s', strtotime($pubRaw)) : current_time('mysql');
             $audio = '';
@@ -418,6 +552,9 @@ class Importer {
             }
             $tags = $tagsArr ? implode(',', array_slice($tagsArr, 0, 6)) : '';
             $categoriesArr = array_unique($categoriesArr);
+            if (empty($options['import_categories'])) {
+                $categoriesArr = [];
+            }
 
             if (!$image && $defaultImage) {
                 $image = $defaultImage;
@@ -526,7 +663,7 @@ class Importer {
                         'image_url' => $image ?: (!empty($options['featured_image']) ? self::clean_url($options['featured_image']) : ''),
                         'duration' => $duration,
                         'tags' => $tags,
-                        'categories' => $categoriesArr,
+                        'categories' => $categoriesArr ? wp_json_encode(array_values($categoriesArr)) : '',
                         'published' => $published,
                     ]);
                     if ($inserted === false) {
@@ -553,16 +690,19 @@ class Importer {
             }
 
             $count++;
-            // Update progress (Phase 1: 0-50%)
-            if ($count % 10 === 0 || $count === $total_items) {
-                $pct = ($total_items > 0) ? round(($count / $total_items) * 50) : 0;
-                set_transient('podify_import_progress_'.$feed_id, [
-                    'total' => $total_items,
-                    'current' => $count,
-                    'percentage' => $pct,
-                    'status' => 'Phase 1: Syncing Data...'
-                ], 3600);
-            }
+            // Update progress every item (Phase 1: 0-50%)
+            $pct = ($total_items > 0) ? floor(($count / $total_items) * 50) : 0;
+            set_transient('podify_import_progress_'.$feed_id, [
+                'total' => $total_items,
+                'current' => $count,
+                'percentage' => $pct,
+                'status' => 'Phase 1: Syncing Data...'
+            ], 3600);
+        }
+
+        $removed_hooks = self::disable_nginx_helper_transition_hook();
+        if (!empty($removed_hooks)) {
+            error_log('[Podify Import] Disabled nginx-helper transition_post_status hook callbacks during import');
         }
 
         // Phase 2: Post Creation
@@ -570,19 +710,27 @@ class Importer {
         $total_posts = count($items_to_process);
         
         foreach ($items_to_process as $item_data) {
-            // Site Performance Guard: Throttle CPU and clear memory every 5 items
-            if ($count_posts % 5 === 0) {
-                usleep(100000); // 100ms pause to let other site processes run
-                if (function_exists('wp_cache_flush_runtime')) {
-                    wp_cache_flush_runtime(); // Clear runtime cache to prevent memory bloat
-                }
-            }
-
             $count_posts++;
             $rowId = $item_data['row_id'];
             $post_id = $item_data['post_id'];
             $title = $item_data['title'];
-            $desc = $item_data['description'];
+
+            error_log('[Podify Import] Phase 2 start: feed=' . intval($feed_id) . ' row=' . intval($rowId) . ' post=' . intval($post_id) . ' title=' . $title);
+            
+            // Log progress for large feeds
+            if ($total_posts > 50 && $count_posts % 50 === 0) {
+                Logger::log("Feed $feed_id: Processing item $count_posts of $total_posts...");
+            }
+
+            // Site Performance Guard: Throttle CPU and clear memory every 5 items
+             if ($count_posts % 5 === 0) {
+                 usleep(100000); // 100ms pause to let other site processes run
+                 if (function_exists('wp_cache_flush_runtime')) {
+                     wp_cache_flush_runtime(); // Clear runtime cache to prevent memory bloat
+                 }
+             }
+
+             $desc = $item_data['description'];
             $audio = $item_data['audio'];
             $image = $item_data['image'];
             $duration = $item_data['duration'];
@@ -599,131 +747,140 @@ class Importer {
             $options = $item_data['options'];
             $feed_id = $item_data['feed_id'];
 
-            if ($post_id > 0) {
-                 $post = get_post($post_id);
-                 if ($post) {
-                     // Only update post content if it actually changed
-                     if ($post->post_title !== $title || $post->post_content !== $desc) {
-                         wp_update_post([
-                             'ID' => $post_id,
-                             'post_title' => $title,
-                             'post_content' => $desc,
-                         ]);
-                         Logger::log("Updated existing post content for $post_id: $title");
-                     }
-                 }
-                 
-                 if ($audio) {
-                     $old_audio = get_post_meta($post_id, '_podify_audio_url', true);
-                     if ($old_audio !== $audio) {
-                         update_post_meta($post_id, '_podify_audio_url', esc_url_raw($audio)); 
-                         Logger::log("Updated audio for post $post_id");
-                     }
-                 }
-                 if ($image) { 
-                     $old_img = get_post_meta($post_id, '_podify_episode_image', true);
-                     if ($old_img !== $image) {
-                         update_post_meta($post_id, '_podify_episode_image', esc_url_raw($image)); 
-                         self::set_featured_image($post_id, $image);
-                     }
-                 }
-                 if ($duration) { 
-                     $old_dur = get_post_meta($post_id, '_podify_duration', true);
-                     if ($old_dur !== $duration) {
-                         update_post_meta($post_id, '_podify_duration', sanitize_text_field($duration)); 
-                     }
-                 }
-                 if ($tags) { 
-                     $old_tags = get_post_meta($post_id, '_podify_tags', true);
-                     if ($old_tags !== $tags) {
-                         update_post_meta($post_id, '_podify_tags', sanitize_text_field($tags)); 
-                     }
-                 }
-                 if ($feed_id) { 
-                     $old_feed = get_post_meta($post_id, 'podify_feed_id', true);
-                     if (intval($old_feed) !== intval($feed_id)) {
-                         update_post_meta($post_id, 'podify_feed_id', intval($feed_id)); 
-                     }
-                 }
-                 
-                 // Sync Categories
-                 if (!empty($categories)) {
-                     $current_terms = wp_get_object_terms($post_id, 'category', ['fields' => 'names']);
-                     $diff1 = array_diff($categories, $current_terms);
-                     $diff2 = array_diff($current_terms, $categories);
-                     
-                     if (!empty($diff1) || !empty($diff2)) {
-                         $cat_ids = [];
-                         foreach ($categories as $cname) {
-                             $term = term_exists($cname, 'category');
-                             if (!$term) { $term = wp_insert_term($cname, 'category'); }
-                             if (!is_wp_error($term) && isset($term['term_id'])) { $cat_ids[] = intval($term['term_id']); }
-                         }
-                         if (!empty($cat_ids)) { wp_set_object_terms($post_id, $cat_ids, 'category', false); }
-                     }
-                 }
-            } else {
-                 $pt = !empty($options['post_type']) ? sanitize_key($options['post_type']) : 'post';
-                 $ps = !empty($options['post_status']) ? sanitize_key($options['post_status']) : 'publish';
-                 $pa = !empty($options['post_author']) ? intval($options['post_author']) : 0;
-                 $postarr = [
-                     'post_title' => $title,
-                     'post_content' => $desc,
-                     'post_type' => $pt,
-                     'post_status' => $ps,
-                     'post_author' => $pa,
-                     'post_date' => $published ?: current_time('mysql'),
-                 ];
-                 $new_post_id = wp_insert_post($postarr, true);
-                 if (!is_wp_error($new_post_id) && $new_post_id) {
-                     Logger::log("Created new WP post $new_post_id for episode: $title");
-                     $wpdb->update($table, ['post_id' => intval($new_post_id)], ['id' => intval($rowId)]);
-                     if ($audio) { update_post_meta($new_post_id, '_podify_audio_url', esc_url_raw($audio)); }
-                     if ($image) { 
-                         update_post_meta($new_post_id, '_podify_episode_image', esc_url_raw($image)); 
-                         self::set_featured_image($new_post_id, $image);
-                     }
-                     if ($duration) { update_post_meta($new_post_id, '_podify_duration', sanitize_text_field($duration)); }
-                     if ($tags) { update_post_meta($new_post_id, '_podify_tags', sanitize_text_field($tags)); }
-                     if ($feed_id) { update_post_meta($new_post_id, 'podify_feed_id', intval($feed_id)); }
-                     
-                     // Sync Categories
-                     if (!empty($categories)) {
-                         $cat_ids = [];
-                         foreach ($categories as $cname) {
-                             $term = term_exists($cname, 'category');
-                             if (!$term) {
-                                 $term = wp_insert_term($cname, 'category');
-                             }
-                             if (!is_wp_error($term) && isset($term['term_id'])) {
-                                 $cat_ids[] = intval($term['term_id']);
-                             }
-                         }
-                         if (!empty($cat_ids)) {
-                             // Use false to REPLACE existing categories (removing Uncategorized)
-                             wp_set_object_terms($new_post_id, $cat_ids, 'category', false);
-                         }
-                     }
-                 } else {
-                     $error_msg = is_wp_error($new_post_id) ? $new_post_id->get_error_message() : 'Unknown error';
-                     Logger::error('Importer: Failed to create WP post for episode "'.$title.'". Error: ' . $error_msg);
-                 }
+            try {
+                if ($post_id > 0) {
+                    $post = get_post($post_id);
+                    if ($post) {
+                        if ($post->post_title !== $title || $post->post_content !== $desc) {
+                            wp_update_post([
+                                'ID' => $post_id,
+                                'post_title' => $title,
+                                'post_content' => $desc,
+                            ]);
+                            Logger::log("Updated existing post content for $post_id: $title");
+                        }
+                    }
+                    
+                    if ($audio) {
+                        $old_audio = get_post_meta($post_id, '_podify_audio_url', true);
+                        if ($old_audio !== $audio) {
+                            update_post_meta($post_id, '_podify_audio_url', esc_url_raw($audio)); 
+                            Logger::log("Updated audio for post $post_id");
+                        }
+                    }
+                    if ($image) { 
+                        $old_img = get_post_meta($post_id, '_podify_episode_image', true);
+                        if ($old_img !== $image) {
+                            update_post_meta($post_id, '_podify_episode_image', esc_url_raw($image)); 
+                            self::set_featured_image($post_id, $image);
+                        }
+                    }
+                    if ($duration) { 
+                        $old_dur = get_post_meta($post_id, '_podify_duration', true);
+                        if ($old_dur !== $duration) {
+                            update_post_meta($post_id, '_podify_duration', sanitize_text_field($duration)); 
+                        }
+                    }
+                    if ($tags) { 
+                        $old_tags = get_post_meta($post_id, '_podify_tags', true);
+                        if ($old_tags !== $tags) {
+                            update_post_meta($post_id, '_podify_tags', sanitize_text_field($tags)); 
+                        }
+                    }
+                    if ($feed_id) { 
+                        $old_feed = get_post_meta($post_id, 'podify_feed_id', true);
+                        if (intval($old_feed) !== intval($feed_id)) {
+                            update_post_meta($post_id, 'podify_feed_id', intval($feed_id)); 
+                        }
+                    }
+                    
+                    if (!empty($categories)) {
+                        $current_terms = wp_get_object_terms($post_id, 'category', ['fields' => 'names']);
+                        $diff1 = array_diff($categories, $current_terms);
+                        $diff2 = array_diff($current_terms, $categories);
+                        
+                        if (!empty($diff1) || !empty($diff2)) {
+                            $cat_ids = [];
+                            foreach ($categories as $cname) {
+                                $term = term_exists($cname, 'category');
+                                if (!$term) { $term = wp_insert_term($cname, 'category'); }
+                                if (!is_wp_error($term) && isset($term['term_id'])) { $cat_ids[] = intval($term['term_id']); }
+                            }
+                            if (!empty($cat_ids)) { wp_set_object_terms($post_id, $cat_ids, 'category', false); }
+                        }
+                    }
+                } else {
+                    $pt = !empty($options['post_type']) ? sanitize_key($options['post_type']) : 'post';
+                    $ps = !empty($options['post_status']) ? sanitize_key($options['post_status']) : 'publish';
+                    $pa = !empty($options['post_author']) ? intval($options['post_author']) : 0;
+                    $postarr = [
+                        'post_title' => $title,
+                        'post_content' => $desc,
+                        'post_type' => $pt,
+                        'post_status' => $ps,
+                        'post_author' => $pa,
+                        'post_date' => $published ?: current_time('mysql'),
+                    ];
+                    $new_post_id = wp_insert_post($postarr, true);
+                    if (!is_wp_error($new_post_id) && $new_post_id) {
+                        Logger::log("Created new WP post $new_post_id for episode: $title");
+                        $wpdb->update($table, ['post_id' => intval($new_post_id)], ['id' => intval($rowId)]);
+                        if ($audio) { update_post_meta($new_post_id, '_podify_audio_url', esc_url_raw($audio)); }
+                        if ($image) { 
+                            update_post_meta($new_post_id, '_podify_episode_image', esc_url_raw($image)); 
+                            self::set_featured_image($new_post_id, $image);
+                        }
+                        if ($duration) { update_post_meta($new_post_id, '_podify_duration', sanitize_text_field($duration)); }
+                        if ($tags) { update_post_meta($new_post_id, '_podify_tags', sanitize_text_field($tags)); }
+                        if ($feed_id) { update_post_meta($new_post_id, 'podify_feed_id', intval($feed_id)); }
+                        
+                        if (!empty($categories)) {
+                            $cat_ids = [];
+                            foreach ($categories as $cname) {
+                                $term = term_exists($cname, 'category');
+                                if (!$term) {
+                                    $term = wp_insert_term($cname, 'category');
+                                }
+                                if (!is_wp_error($term) && isset($term['term_id'])) {
+                                    $cat_ids[] = intval($term['term_id']);
+                                }
+                            }
+                            if (!empty($cat_ids)) {
+                                wp_set_object_terms($new_post_id, $cat_ids, 'category', false);
+                            }
+                        }
+                    } else {
+                        $error_msg = is_wp_error($new_post_id) ? $new_post_id->get_error_message() : 'Unknown error';
+                        Logger::error('Importer: Failed to create WP post for episode "'.$title.'". Error: ' . $error_msg);
+                    }
+                }
+            } catch (\Throwable $e) {
+                error_log('[Podify Import] Phase 2 exception: feed=' . intval($feed_id) . ' row=' . intval($rowId) . ' post=' . intval($post_id) . ' title=' . $title . ' msg=' . $e->getMessage());
+                error_log('[Podify Import] Phase 2 trace: ' . $e->getTraceAsString());
+                Logger::error('Importer: Phase 2 failed for episode "'.$title.'": ' . $e->getMessage());
             }
 
-            if ($count_posts % 5 === 0 || $count_posts === $total_posts) {
-                $pct = 50 + (($total_posts > 0) ? round(($count_posts / $total_posts) * 50) : 0);
-                set_transient('podify_import_progress_'.$feed_id, [
-                    'total' => $total_items,
-                    'current' => $count_posts,
-                    'percentage' => $pct,
-                    'status' => 'Phase 2: Creating Posts...'
-                ], 3600);
-                 if ($pct % 20 === 0) {
-                    Logger::log("Feed $feed_id Phase 2 progress: $pct% ($count_posts/$total_posts)");
-                }
+            // Update progress every item for a smoother UI experience
+            $pct = 50 + (($total_posts > 0) ? floor(($count_posts / $total_posts) * 49) : 0);
+            set_transient('podify_import_progress_'.$feed_id, [
+                'total' => $total_items,
+                'current' => $count_posts,
+                'percentage' => $pct,
+                'status' => 'Phase 2: Creating Posts...'
+            ], 3600);
+
+            if ($count_posts % 20 === 0) {
+                Logger::log("Feed $feed_id Phase 2 progress: $pct% ($count_posts/$total_posts)");
             }
         }
-        delete_transient('podify_import_progress_'.$feed_id);
+
+        // Set final 100% status before cleanup
+        set_transient('podify_import_progress_'.$feed_id, [
+            'total' => $total_items,
+            'current' => $count_posts,
+            'percentage' => 100,
+            'status' => 'Sync completed!'
+        ], 300); // Keep for 5 mins so UI can see it
         
         // Restore optimization settings
         if (function_exists('wp_suspend_cache_addition')) wp_suspend_cache_addition(false);
@@ -731,9 +888,33 @@ class Importer {
         if (function_exists('wp_defer_comment_counting')) wp_defer_comment_counting(false);
         
         Database::set_feed_last_sync($feed_id);
+        error_log('[Podify Import] Import for feed ' . $feed_id . ' completed successfully. Total episodes processed: ' . $count);
         Logger::log("Import for feed $feed_id completed successfully. Total episodes processed: $count");
-        delete_transient($lock_key);
         return ['ok' => true, 'message' => 'Import completed', 'imported' => $count];
+        } catch (\Throwable $e) {
+            error_log('[Podify Import] Exception/Error: ' . $e->getMessage());
+            error_log('[Podify Import] Trace: ' . $e->getTraceAsString());
+            Logger::error('Importer: import_feed failed for feed ' . intval($feed_id) . ': ' . $e->getMessage());
+            $fid = intval($feed_id);
+            if ($fid) {
+                set_transient('podify_import_progress_'.$fid, [
+                    'total' => 0,
+                    'current' => 0,
+                    'percentage' => 100,
+                    'status' => 'Error: ' . $e->getMessage()
+                ], 60);
+            }
+            return ['ok' => false, 'message' => $e->getMessage()];
+        } finally {
+            if (isset($removed_hooks)) {
+                self::restore_hook_callbacks($removed_hooks);
+            }
+            if (function_exists('wp_suspend_cache_addition')) wp_suspend_cache_addition(false);
+            if (function_exists('wp_defer_term_counting')) wp_defer_term_counting(false);
+            if (function_exists('wp_defer_comment_counting')) wp_defer_comment_counting(false);
+            error_log('[Podify Import] Finally block - clearing lock');
+            delete_transient($lock_key);
+        }
     }
     public static function resync_feed($feed_id) {
         global $wpdb;
@@ -743,5 +924,324 @@ class Importer {
         }
         // Force sync to update all episodes and images
         return self::import_feed($feed_id, true);
+    }
+
+    public static function backfill_feed_links($feed_id, $force = false, $max_items = 50) {
+        error_log('[Podify Backfill] Starting backfill_feed_links function');
+        $lock_key = 'podify_backfill_lock_' . $feed_id;
+        
+        if ($force) {
+            error_log('[Podify Backfill] Force mode - clearing existing lock');
+            delete_transient($lock_key);
+            delete_transient('podify_backfill_cursor_' . intval($feed_id));
+            delete_transient('podify_backfill_feed_body_' . intval($feed_id));
+            self::get_backfill_token($feed_id, true);
+        }
+        
+        if (get_transient($lock_key)) {
+            error_log('[Podify Backfill] Backfill already in progress for feed ' . $feed_id);
+            Logger::log("Backfill already in progress for feed $feed_id. Skipping.");
+            return ['ok' => false, 'message' => 'Backfill already in progress'];
+        }
+        set_transient($lock_key, true, 300);
+        
+        try {
+            error_log('[Podify Backfill] Starting link backfill for feed ' . $feed_id);
+            Logger::log("Starting link backfill for feed $feed_id");
+
+            global $wpdb;
+            $table = "{$wpdb->prefix}podify_podcast_episodes";
+            $feed_id = intval($feed_id);
+
+            if (!$feed_id) {
+                return ['ok' => false, 'message' => 'Invalid feed_id'];
+            }
+
+            $feed = Database::get_feed($feed_id);
+            if (!$feed || empty($feed['feed_url'])) {
+                return ['ok' => false, 'message' => 'Feed not found'];
+            }
+
+            $url = esc_url_raw($feed['feed_url']);
+            $cache_key = 'podify_backfill_feed_body_' . $feed_id;
+            $body = get_transient($cache_key);
+            if (!is_string($body) || $body === '') {
+                Logger::log("Backfill: Fetching feed URL: " . $url);
+                $resp = wp_remote_get($url, ['timeout' => 30, 'headers' => ['Accept' => 'application/rss+xml, application/xml;q=0.9, */*;q=0.8']]);
+                if (is_wp_error($resp)) {
+                    Logger::error("Backfill: Failed to fetch feed: " . $resp->get_error_message());
+                    return ['ok' => false, 'message' => 'Failed to fetch feed'];
+                }
+                $body = wp_remote_retrieve_body($resp);
+                if (is_string($body) && $body !== '') {
+                    set_transient($cache_key, $body, 30 * 60);
+                }
+            } else {
+                Logger::log("Backfill: Using cached feed body for feed " . $feed_id . " (length: " . strlen($body) . ")");
+            }
+            if (!$body) {
+                Logger::error("Backfill: Feed response body is empty");
+                return ['ok' => false, 'message' => 'Empty feed response'];
+            }
+            Logger::log("Backfill: Feed fetched successfully, body length: " . strlen($body));
+
+            libxml_use_internal_errors(true);
+            $xml = simplexml_load_string($body, 'SimpleXMLElement', LIBXML_NOCDATA);
+            if (!$xml) {
+                libxml_clear_errors();
+                Logger::error("Backfill: Invalid RSS XML");
+                return ['ok' => false, 'message' => 'Invalid RSS XML'];
+            }
+
+            $channel = isset($xml->channel) ? $xml->channel : $xml;
+            $feed_item_exact = [];
+            $feed_item_by_title = [];
+            $feed_item_by_published = [];
+            if (isset($channel->item)) {
+                foreach ($channel->item as $it) {
+                    $t = trim((string)$it->title);
+                    $pubRaw = (string)$it->pubDate;
+                    $p = $pubRaw ? date('Y-m-d H:i:s', strtotime($pubRaw)) : '';
+                    if ($t !== '' || $p !== '') {
+                        $feed_item_exact[$t . '||' . $p] = $it;
+                    }
+                    if ($t !== '') {
+                        $feed_item_by_title[$t] = $it;
+                    }
+                    if ($p !== '') {
+                        $feed_item_by_published[$p] = $it;
+                    }
+                }
+            }
+            $total_backlinks = 0;
+            $results = [
+                'updated' => 0,
+                'skipped' => 0,
+                'failed' => 0,
+                'unmatched' => 0,
+                'total_backlinks' => 0,
+                'episodes' => []
+            ];
+
+            $total_items = isset($channel->item) ? count($channel->item) : 0;
+            Logger::log("Backfill: Found " . $total_items . " items in the feed");
+            
+            $db_episodes = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table WHERE feed_id=%d",
+                $feed_id
+            ), ARRAY_A);
+            $total_db_episodes = count($db_episodes);
+            Logger::log("Backfill: Found " . $total_db_episodes . " episodes in database for this feed");
+
+            set_transient('podify_backfill_progress_'.$feed_id, [
+                'total' => $total_db_episodes,
+                'current' => 0,
+                'percentage' => 0,
+                'status' => 'Starting backfill...'
+            ], 3600);
+
+            $max_items = is_numeric($max_items) ? intval($max_items) : 30;
+            if ($max_items <= 0) $max_items = 30;
+
+            $cursor = intval(get_transient('podify_backfill_cursor_' . $feed_id));
+            if ($cursor < 0) $cursor = 0;
+            if ($cursor > 0) {
+                error_log('[Podify Backfill] Resuming from cursor=' . $cursor . ' for feed ' . $feed_id);
+            }
+
+            $count = 0;
+            $processed_this_run = 0;
+            foreach ($db_episodes as $idx => $db_episode) {
+                if ($idx < $cursor) {
+                    continue;
+                }
+
+                $count = $idx + 1;
+                $db_title = $db_episode['title'];
+                $db_published = $db_episode['published'];
+                $post_id = intval($db_episode['post_id']);
+
+                error_log('[Podify Backfill] Episode start: feed=' . intval($feed_id) . ' idx=' . $idx . ' post=' . $post_id . ' title=' . $db_title);
+                Logger::log("Backfill: Processing database episode " . $count . "/" . $total_db_episodes . " - " . $db_title . " (post_id: " . $post_id . ")");
+
+                try {
+                    $matching_feed_item = null;
+                    $exact_key = $db_title . '||' . $db_published;
+                    if (isset($feed_item_exact[$exact_key])) {
+                        $matching_feed_item = $feed_item_exact[$exact_key];
+                        Logger::log("Backfill: Found exact matching feed item for " . $db_title);
+                    } elseif (isset($feed_item_by_title[$db_title])) {
+                        $matching_feed_item = $feed_item_by_title[$db_title];
+                        Logger::log("Backfill: Found partial matching feed item by title for " . $db_title);
+                    } elseif ($db_published && isset($feed_item_by_published[$db_published])) {
+                        $matching_feed_item = $feed_item_by_published[$db_published];
+                        Logger::log("Backfill: Found partial matching feed item by published date for " . $db_title);
+                    }
+
+                    if (!$matching_feed_item) {
+                        $results['unmatched']++;
+                        Logger::log("Backfill: No matching feed item for database episode: " . $db_title);
+                    } else {
+                        $desc = '';
+                        $itunes = $matching_feed_item->children('itunes', true);
+                        $content = $matching_feed_item->children('content', true);
+                        
+                        Logger::log("Backfill: Processing description for: " . $db_title);
+                        
+                        if ($content && isset($content->encoded)) {
+                            $temp_desc = trim((string)$content->encoded);
+                            if (!empty($temp_desc)) {
+                                $desc = $temp_desc;
+                                Logger::log("Backfill: Using content:encoded for: " . $db_title);
+                            }
+                        }
+                        
+                        if (empty($desc)) {
+                            $temp_desc = trim((string)$matching_feed_item->description);
+                            if (!empty($temp_desc)) {
+                                $desc = $temp_desc;
+                                Logger::log("Backfill: Using description for: " . $db_title);
+                            }
+                        }
+                        
+                        if (empty($desc)) {
+                            if ($itunes && isset($itunes->summary)) {
+                                $desc = trim((string)$itunes->summary);
+                                Logger::log("Backfill: Using itunes:summary for: " . $db_title);
+                            }
+                        }
+                        
+                        if (empty($desc) && $content && isset($content->encoded)) {
+                            $desc = trim((string)$content->encoded);
+                            Logger::log("Backfill: Fallback to content:encoded (empty) for: " . $db_title);
+                        }
+                        
+                        if (empty($desc)) {
+                            $desc = trim((string)$matching_feed_item->description);
+                            Logger::log("Backfill: Fallback to description (empty) for: " . $db_title);
+                        }
+                        
+                        $link_count = Helpers::count_links_in_content($desc);
+                        Logger::log("Backfill: Final description for " . $db_title . " (length: " . strlen($desc) . ", links: " . $link_count . ")");
+                        $desc = Helpers::sanitize_feed_content($desc);
+                        $sanitized_link_count = Helpers::count_links_in_content($desc);
+                        Logger::log("Backfill: Sanitized description for " . $db_title . " (length: " . strlen($desc) . ", links: " . $sanitized_link_count . ")");
+                        
+                        $total_backlinks += $sanitized_link_count;
+                        
+                        $episode_data = [
+                            'title' => $db_title,
+                            'post_id' => $post_id,
+                            'links_before' => $link_count,
+                            'links_after' => $sanitized_link_count,
+                            'status' => ''
+                        ];
+
+                        if ($post_id > 0) {
+                            $post = get_post($post_id);
+                            if ($post) {
+                                $now = current_time('mysql');
+                                $gmt = function_exists('get_gmt_from_date') ? get_gmt_from_date($now) : gmdate('Y-m-d H:i:s');
+                                $upd = $wpdb->update($wpdb->posts, [
+                                    'post_content' => $desc,
+                                    'post_modified' => $now,
+                                    'post_modified_gmt' => $gmt,
+                                ], ['ID' => $post_id]);
+                                if ($upd === false) {
+                                    $results['failed']++;
+                                    $episode_data['status'] = 'db_update_failed';
+                                    Logger::error("Backfill: DB update failed for post $post_id ($db_title): " . $wpdb->last_error);
+                                } else {
+                                    clean_post_cache($post_id);
+                                    $wpdb->update($table, ['description' => $desc], ['id' => intval($db_episode['id'])]);
+                                    $results['updated']++;
+                                    $episode_data['status'] = 'updated';
+                                    Logger::log("Backfill: FORCE updated post $post_id: $db_title with $sanitized_link_count links");
+                                }
+                            } else {
+                                $results['failed']++;
+                                $episode_data['status'] = 'post_not_found';
+                                Logger::error("Backfill: Post not found for database episode: $db_title");
+                            }
+                        } else {
+                            $results['failed']++;
+                            $episode_data['status'] = 'no_post_id';
+                            Logger::error("Backfill: No post_id for database episode: $db_title");
+                        }
+                        
+                        $results['episodes'][] = $episode_data;
+                    }
+                } catch (\Throwable $e) {
+                    error_log('[Podify Backfill] Episode exception: feed=' . intval($feed_id) . ' idx=' . $idx . ' post=' . $post_id . ' title=' . $db_title . ' msg=' . $e->getMessage());
+                    error_log('[Podify Backfill] Episode trace: ' . $e->getTraceAsString());
+                    $results['failed']++;
+                    Logger::error('Backfill: Exception for episode "'.$db_title.'": ' . $e->getMessage());
+                }
+
+                $pct = ($total_db_episodes > 0) ? floor(($count / $total_db_episodes) * 100) : 0;
+                set_transient('podify_backfill_progress_'.$feed_id, [
+                    'total' => $total_db_episodes,
+                    'current' => $count,
+                    'percentage' => $pct,
+                    'status' => 'Backfilling...'
+                ], 3600);
+                set_transient('podify_backfill_cursor_' . $feed_id, $count, 3600);
+                usleep(10000);
+
+                $processed_this_run++;
+                if ($max_items > 0 && $processed_this_run >= $max_items && $count < $total_db_episodes) {
+                    Logger::log("Backfill: Pausing at $count/$total_db_episodes to avoid server timeout. Continuing automatically...");
+                    break;
+                }
+            }
+
+            $results['total_backlinks'] = $total_backlinks;
+
+            if ($count < $total_db_episodes) {
+                $pct = ($total_db_episodes > 0) ? floor(($count / $total_db_episodes) * 100) : 0;
+                set_transient('podify_backfill_progress_'.$feed_id, [
+                    'total' => $total_db_episodes,
+                    'current' => $count,
+                    'percentage' => $pct,
+                    'status' => 'Backfill continuing...'
+                ], 3600);
+
+                $token = self::get_backfill_token($feed_id, false);
+                set_transient('podify_backfill_needs_continue_' . $feed_id, $token, 300);
+                return [
+                    'ok' => true,
+                    'message' => 'Backfill continuing',
+                    'partial' => true,
+                    'cursor' => $count,
+                    'results' => $results
+                ];
+            }
+
+            set_transient('podify_backfill_progress_'.$feed_id, [
+                'total' => $total_db_episodes,
+                'current' => $count,
+                'percentage' => 100,
+                'status' => 'Backfill completed!'
+            ], 300);
+
+            delete_transient('podify_backfill_cursor_' . $feed_id);
+            Logger::log("==================================================");
+            Logger::log("Backfill for feed $feed_id completed successfully!");
+            Logger::log("Total backlinks processed: " . $total_backlinks);
+            Logger::log("Episodes updated: " . $results['updated']);
+            Logger::log("Episodes failed: " . $results['failed']);
+            Logger::log("Episodes unmatched: " . $results['unmatched']);
+            Logger::log("==================================================");
+            Logger::log("Backfill for feed $feed_id completed: " . json_encode($results));
+            return ['ok' => true, 'results' => $results];
+        } finally {
+            error_log('[Podify Backfill] Finally block - clearing lock');
+            delete_transient($lock_key);
+            $tok = get_transient('podify_backfill_needs_continue_' . $feed_id);
+            if (is_string($tok) && $tok !== '') {
+                delete_transient('podify_backfill_needs_continue_' . $feed_id);
+                self::spawn_backfill_continue($feed_id, $tok);
+            }
+        }
     }
 }

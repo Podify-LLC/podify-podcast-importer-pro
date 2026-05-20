@@ -3,7 +3,7 @@
  * Plugin Name: Podify Podcast Importer Pro
  * Plugin URI: https://github.com/Podify-LLC/podify-podcast-importer-pro
  * Description: Advanced podcast importer for WordPress.
- * Version: 1.0.39
+ * Version: 1.0.42
  * Author: Podify Inc.
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@
 
 defined('ABSPATH') || exit;
 
-define('PODIFY_PODCAST_VERSION', '1.0.39');
+define('PODIFY_PODCAST_VERSION', '1.0.42');
 define('PODIFY_PODCAST_PATH', plugin_dir_path(__FILE__));
 define('PODIFY_PODCAST_URL', plugin_dir_url(__FILE__));
 
